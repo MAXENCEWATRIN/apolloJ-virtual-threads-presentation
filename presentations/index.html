@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <title>Ta présentation Reveal.js</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+    <!-- CSS Reveal.js et thème via CDN -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/4.5.0/reveal.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/4.5.0/theme/black.min.css" id="theme">
+    <!-- Theme used for syntax highlighting of code -->
+    <!-- <link rel="stylesheet" href="lib/css/zenburn.css"> -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/9.13.1/styles/zenburn.min.css">
+    <!-- Markdown plugin -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/4.5.0/plugin/markdown/markdown.min.css">
+</head>
+
+<body>
+    <div class="reveal">
+    <div class="slides">
+      <!-- Pour chaque fichier markdown, une section data-markdown -->
+      <section data-markdown="slides/intro.md"
+               data-separator="^\n---\n"
+               data-separator-vertical="^\n--\n"
+               data-separator-notes="^Note:"
+               data-charset="utf-8">
+      </section>
+      <section data-markdown="slides/thread.md"></section>
+      <section data-markdown="slides/vthread.md"></section>
+      <!-- Ajoute tes autres slides ici -->
+    </div>
+    <!-- JS Reveal.js via CDN -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/4.5.0/reveal.min.js"></script>
+    <script>
+        Reveal.initialize({
+            controls: true,
+            progress: true,
+            center: true,
+            plugins: []
+        });
+    </script>
+</body>
+
+</html>
