@@ -18,3 +18,5 @@
 - L’OS gère chaque thread séparément → coût de création et de contexte élevé.
 - En Java classique : quelques milliers de threads max dans une appli courante.
 
+
+[Page suivante ➡️](slides/thread.md)

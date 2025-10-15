@@ -1,0 +1,7 @@
+title: "Présentation Java Virtuzal Threads"
+markdown: kramdown
+plugins:
+  - jekyll-relative-links
+relative_links:
+  enabled: true
+  collections: true
