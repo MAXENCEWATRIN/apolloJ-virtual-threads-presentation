@@ -1,22 +1,42 @@
-# Virtual Threads en Java 21 → 25  
-### Simplifier la concurrence à grande échelle  
-**Atelier interne — [Ton Nom]**  
-**[Entreprise] — Octobre 2025**
+# index.md
 
 ---
 
-## Qu’est-ce qu’un Thread ?
-- Un thread est une unité d’exécution dans un processus.
-- Permet le multitâche au sein d’un même programme.
-- Les threads partagent la mémoire du processus.
-- Exemple visuel : plusieurs ouvriers travaillant sur le même chantier.
+# Les Threads Virtuels en Java
+
+## De la théorie à la pratique
 
 ---
 
-## Threads physiques dans la JVM
-- Chaque `java.lang.Thread` correspond à un **thread natif** du système.
-- L’OS gère chaque thread séparément → coût de création et de contexte élevé.
-- En Java classique : quelques milliers de threads max dans une appli courante.
+<br>
 
+### 👤 Présenté par
+**Maxence WATRIN**
 
-[Page suivante ➡️](slides/thread.md)
+### 📅 Date
+**[Date de la présentation]**
+
+### 🏢 Entreprise
+**Apollo**
+
+---
+
+<br>
+
+### 🚀 Bienvenue
+
+Cette présentation explore les **Virtual Threads** introduits dans Java 21, une révolution dans la gestion de la concurrence en Java. Nous aborderons la théorie, les cas d'usage pratiques, et l'intégration dans des environnements de production modernes.
+
+---
+
+<br>
+
+[📋 Voir le sommaire →](sommaire.md)
+
+[▶️ Commencer la présentation →](slides/01-qu-est-ce-qu-un-thread.md)
+
+---
+
+<div style="text-align: center; margin-top: 50px; color: #666;">
+  <small>Préparé avec ❤️ pour la communauté Java</small>
+</div>
