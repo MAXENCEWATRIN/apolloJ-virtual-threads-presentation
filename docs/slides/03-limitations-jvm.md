@@ -1,5 +1,3 @@
-# chapters/03-limitations-jvm.md
-
 [🏠 Accueil](../index.md) | [📋 Sommaire](../sommaire.md) | [⬅️ Précédent](02-jvm-platform-threads.md) | [➡️ Suivant](04-virtual-threads-intro.md)
 
 ---

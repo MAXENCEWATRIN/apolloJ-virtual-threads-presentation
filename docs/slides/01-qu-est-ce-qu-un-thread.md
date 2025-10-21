@@ -1,5 +1,3 @@
-# chapters/01-qu-est-ce-qu-un-thread.md
-
 [🏠 Accueil](../index.md) | [📋 Sommaire](../sommaire.md) | [➡️ Suivant](02-jvm-platform-threads.md)
 
 ---

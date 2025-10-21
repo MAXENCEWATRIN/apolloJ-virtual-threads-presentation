@@ -1,5 +1,3 @@
-# chapters/04-virtual-threads-intro.md
-
 [🏠 Accueil](../index.md) | [📋 Sommaire](../sommaire.md) | [⬅️ Précédent](03-limitations-jvm.md) | [➡️ Suivant](05-avant-apres.md)
 
 ---
