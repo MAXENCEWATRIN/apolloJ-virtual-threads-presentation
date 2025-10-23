@@ -1,7 +1,3 @@
-# index.md
-
----
-
 # Les Threads Virtuels en Java
 
 ## De la théorie à la pratique
