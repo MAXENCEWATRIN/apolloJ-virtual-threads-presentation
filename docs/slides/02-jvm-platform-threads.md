@@ -1,4 +1,4 @@
-[🏠 Accueil](../index.md) | [📋 Sommaire](../sommaire.md) | [⬅️ Précédent](01-qu-est-ce-qu-un-thread.md) | [➡️ Suivant](03-limitations-jvm.md)
+[🏠 Accueil](../index.md) | [📋 Sommaire](../sommaire.md) | [📖 Lexique](lexique.md) | [⬅️ Précédent](01-qu-est-ce-qu-un-thread.md) | [➡️ Suivant](03-limitations-jvm.md)
 
 ---
 

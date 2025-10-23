@@ -1,4 +1,4 @@
-[🏠 Accueil](../index.md) | [📋 Sommaire](../sommaire.md) | [➡️ Suivant](02-jvm-platform-threads.md)
+[🏠 Accueil](../index.md) | [📋 Sommaire](../sommaire.md) | [📖 Lexique](lexique.md) | [➡️ Suivant](02-jvm-platform-threads.md)
 
 ---
 

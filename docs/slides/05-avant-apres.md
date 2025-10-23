@@ -1,4 +1,4 @@
-[🏠 Accueil](../index.md) | [📋 Sommaire](../sommaire.md) | [⬅️ Précédent](04-virtual-threads-intro.md) | [➡️ Suivant](06-conclusion.md)
+[🏠 Accueil](../index.md) | [📋 Sommaire](../sommaire.md) | [📖 Lexique](lexique.md) | [⬅️ Précédent](04-virtual-threads-intro.md) | [➡️ Suivant](06-conclusion.md)
 
 ---
 

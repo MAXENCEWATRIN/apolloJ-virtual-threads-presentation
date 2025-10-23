@@ -1,4 +1,4 @@
-[🏠 Accueil](../index.md) | [📋 Sommaire](../sommaire.md) | [⬅️ Précédent](03-limitations-jvm.md) | [➡️ Suivant](05-avant-apres.md)
+[🏠 Accueil](../index.md) | [📋 Sommaire](../sommaire.md) | [📖 Lexique](lexique.md) | [⬅️ Précédent](03-limitations-jvm.md) | [➡️ Suivant](05-avant-apres.md)
 
 ---
 

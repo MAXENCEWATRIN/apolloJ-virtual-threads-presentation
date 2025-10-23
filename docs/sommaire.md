@@ -75,7 +75,7 @@
 - Benchmarks comparatifs
 - Métriques et résultats
 
----
+--- 
 
 ## 6. Déploiement
 

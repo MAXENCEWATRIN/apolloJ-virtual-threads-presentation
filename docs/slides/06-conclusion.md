@@ -1,5 +1,5 @@
 
-[🏠 Accueil](../index.md) | [📋 Sommaire](../sommaire.md) | [⬅️ Précédent](05-avant-apres.md)
+[🏠 Accueil](../index.md) | [📋 Sommaire](../sommaire.md) | [📖 Lexique](lexique.md) | [⬅️ Précédent](05-avant-apres.md)
 
 ---
 
