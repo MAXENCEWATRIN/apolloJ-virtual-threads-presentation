@@ -21,9 +21,9 @@ Serveur HTTP classique (Tomcat, Jetty, etc.)
 │  ...                                            │
 │  Client 200 → [Thread 200] → Handler → Response │
 │                                                 │
-│  ⚠️ Client 201 → [QUEUE] En attente...        │
-│  ⚠️ Client 202 → [QUEUE] En attente...         |
-│  ⚠️ Client 203 → [QUEUE] En attente...         |
+│  ⚠️ Client 201 → [QUEUE] En attente...          │
+│  ⚠️ Client 202 → [QUEUE] En attente...          |
+│  ⚠️ Client 203 → [QUEUE] En attente...          |
 │                                                 │
 └─────────────────────────────────────────────────┘
 

@@ -131,7 +131,7 @@
 
 ### Heap
 **Définition :** Zone mémoire où sont alloués les objets Java.  
-**Traduction :** Tas  
+**Traduction :** Non  
 **Usage :** "Heap" est standard en français technique Java.
 
 ### HTTP Client

@@ -14,46 +14,46 @@ Depuis Java 1.2, Java utilise un modèle **1:1** : chaque thread Java correspond
 ┌─────────────────────────────────────────────────────────┐
 │                    JVM Process                          │
 │                                                         │
-│  ┌───────────────────────────────────────────────┐    │
-│  │          Java Application Code                 │    │
-│  │                                                │    │
-│  │  Thread t = new Thread(() -> {                │    │
-│  │      System.out.println("Hello");             │    │
-│  │  });                                          │    │
-│  │  t.start();                                   │    │
-│  └────────────────┬──────────────────────────────┘    │
+│  ┌───────────────────────────────────────────────┐      │
+│  │          Java Application Code                │      │
+│  │                                               │      │
+│  │  Thread t = new Thread(() -> {                │      │
+│  │      System.out.println("Hello");             │      │
+│  │  });                                          │      │
+│  │  t.start();                                   │      │
+│  └────────────────┬──────────────────────────────┘      │
 │                   │                                     │
-│  ┌────────────────▼──────────────────────────────┐    │
-│  │         Java Thread Objects (Heap)            │    │
-│  │                                                │    │
-│  │  ┌──────────────┐      ┌──────────────┐      │    │
-│  │  │ Thread obj 1 │      │ Thread obj 2 │      │    │
-│  │  │ - name       │      │ - name       │      │    │
-│  │  │ - priority   │      │ - priority   │      │    │
-│  │  │ - state      │      │ - state      │      │    │
-│  │  │ - target     │      │ - target     │      │    │
-│  │  └──────┬───────┘      └──────┬───────┘      │    │
-│  └─────────┼──────────────────────┼──────────────┘    │
+│  ┌────────────────▼──────────────────────────────┐      │
+│  │         Java Thread Objects (Heap)            │      │
+│  │                                               │      │
+│  │  ┌──────────────┐      ┌──────────────┐       │      │
+│  │  │ Thread obj 1 │      │ Thread obj 2 │       │      │
+│  │  │ - name       │      │ - name       │       │      │
+│  │  │ - priority   │      │ - priority   │       │      │
+│  │  │ - state      │      │ - state      │       │      │
+│  │  │ - target     │      │ - target     │       │      │
+│  │  └──────┬───────┘      └──────┬───────┘       │      │
+│  └─────────┼──────────────────────┼──────────────┘      │
 │            │                      │                     │
-│            │    Native Method Interface (JNI)         │
+│            │    Native Method Interface (JNI)           │
 │            │                      │                     │
-│  ┌─────────▼──────────────────────▼──────────────┐    │
-│  │          Native Thread Layer                  │    │
-│  │                                                │    │
-│  │      pthread_create() / CreateThread()        │    │
-│  └────────────────┬──────────────────────────────┘    │
+│  ┌─────────▼──────────────────────▼──────────────┐      │
+│  │          Native Thread Layer                  │      │
+│  │                                               │      │
+│  │      pthread_create() / CreateThread()        │      │
+│  └────────────────┬──────────────────────────────┘      │
 │                   │                                     │
 └───────────────────┼─────────────────────────────────────┘
                     │ Appels système (syscalls)
 ┌───────────────────▼─────────────────────────────────────┐
 │                Operating System (Linux/Windows)         │
 │                                                         │
-│  ┌──────────────┐      ┌──────────────┐               │
-│  │ OS Thread 1  │      │ OS Thread 2  │               │
-│  │ (pthread_t)  │      │ (pthread_t)  │               │
-│  │              │      │              │               │
-│  │ Stack: 2 MB  │      │ Stack: 2 MB  │               │
-│  └──────┬───────┘      └──────┬───────┘               │
+│  ┌──────────────┐      ┌──────────────┐                 │
+│  │ OS Thread 1  │      │ OS Thread 2  │                 │
+│  │ (pthread_t)  │      │ (pthread_t)  │                 │
+│  │              │      │              │                 │
+│  │ Stack: 2 MB  │      │ Stack: 2 MB  │                 │
+│  └──────┬───────┘      └──────┬───────┘                 │
 │         │                     │                         │
 │         │   Kernel Scheduler  │                         │
 │         │                     │                         │
@@ -73,113 +73,70 @@ Depuis Java 1.2, Java utilise un modèle **1:1** : chaque thread Java correspond
 
 ```
 ┌─────────────────────────────────────────────────────┐
-│               JVM Memory Layout                     │
+│               JVM pile mémoire                      │
 ├─────────────────────────────────────────────────────┤
 │                                                     │
-│  ┌─────────────────────────────────────────┐       │
-│  │         Java Heap (Shared)              │       │
-│  │                                         │       │
-│  │  • Thread objects                       │       │
-│  │  • Application objects                  │       │
-│  │  • ThreadLocal values (data)            │       │
-│  │                                         │       │
-│  └─────────────────────────────────────────┘       │
+│  ┌─────────────────────────────────────────┐        │
+│  │       Java Heap (partagée)              │        │
+│  │                                         │        │
+│  │  • Thread objects                       │        │
+│  │  • Application objects                  │        │
+│  │  • ThreadLocal values (data)            │        │
+│  │                                         │        │
+│  └─────────────────────────────────────────┘        │
 │                                                     │
-│  ┌─────────────────────────────────────────┐       │
-│  │      Method Area (Shared)               │       │
-│  │  • Class metadata                       │       │
-│  │  • Static fields                        │       │
-│  │  • Runtime constant pool                │       │
-│  └─────────────────────────────────────────┘       │
+│  ┌─────────────────────────────────────────┐        │
+│  │      Method Area (partagée)             │        │
+│  │  • Class metadata                       │        │
+│  │  • Static fields                        │        │
+│  │  • Runtime constant pool                │        │
+│  └─────────────────────────────────────────┘        │
 │                                                     │
-│  ┌──────────────┐  ┌──────────────┐               │
-│  │Thread 1 Stack│  │Thread 2 Stack│  Per-thread   │
-│  │              │  │              │               │
-│  │ ┌──────────┐ │  │ ┌──────────┐ │               │
-│  │ │ Frame 3  │ │  │ │ Frame 2  │ │ Frames =     │
-│  │ ├──────────┤ │  │ ├──────────┤ │ method calls │
-│  │ │ Frame 2  │ │  │ │ Frame 1  │ │               │
-│  │ ├──────────┤ │  │ └──────────┘ │               │
-│  │ │ Frame 1  │ │  │              │               │
-│  │ └──────────┘ │  │              │               │
-│  │              │  │              │               │
-│  │ • Local vars │  │ • Local vars │               │
-│  │ • Operands   │  │ • Operands   │               │
-│  │ • Frame data │  │ • Frame data │               │
-│  └──────────────┘  └──────────────┘               │
+│  ┌──────────────┐  ┌──────────────┐                 │
+│  │Thread 1 Stack│  │Thread 2 Stack│  Per-thread     │
+│  │              │  │              │                 │
+│  │ ┌──────────┐ │  │ ┌──────────┐ │                 │
+│  │ │ Frame 3  │ │  │ │ Frame 2  │ │ Frames =        │
+│  │ ├──────────┤ │  │ ├──────────┤ │ method calls    │
+│  │ │ Frame 2  │ │  │ │ Frame 1  │ │                 │
+│  │ ├──────────┤ │  │ └──────────┘ │                 │
+│  │ │ Frame 1  │ │  │              │                 │
+│  │ └──────────┘ │  │              │                 │
+│  │              │  │              │                 │
+│  │ • Local vars │  │ • Local vars │                 │
+│  │ • Operands   │  │ • Operands   │                 │
+│  │ • Frame data │  │ • Frame data │                 │
+│  └──────────────┘  └──────────────┘                 │
 │                                                     │
-│  ┌──────────────┐  ┌──────────────┐               │
-│  │  Thread 1    │  │  Thread 2    │  Per-thread   │
-│  │  PC Register │  │  PC Register │               │
-│  │  (pointeur)  │  │  (pointeur)  │               │
-│  └──────────────┘  └──────────────┘               │
+│  ┌──────────────┐  ┌──────────────┐                 │
+│  │  Thread 1    │  │  Thread 2    │  Per-thread     │
+│  │  PC Register │  │  PC Register │                 │
+│  │  (pointeur)  │  │  (pointeur)  │                 │
+│  └──────────────┘  └──────────────┘                 │
 │                                                     │
-│  ┌──────────────┐  ┌──────────────┐               │
-│  │Native Method │  │Native Method │  Per-thread   │
-│  │Stack (JNI)   │  │Stack (JNI)   │               │
-│  └──────────────┘  └──────────────┘               │
+│  ┌──────────────┐  ┌──────────────┐                 │
+│  │Native Method │  │Native Method │  Per-thread     │
+│  │Stack (JNI)   │  │Stack (JNI)   │                 │
+│  └──────────────┘  └──────────────┘                 │
 │                                                     │
 └─────────────────────────────────────────────────────┘
 ```
 
-### Code Java vs représentation mémoire
+**Quelques explications :**
 
-```java
-public class ThreadMemoryExample {
-    
-    // Stocké dans Method Area (partagé entre tous les threads)
-    private static int sharedCounter = 0;
-    
-    // ThreadLocal : une copie par thread (dans Heap, mais isolée)
-    private static ThreadLocal<Integer> threadLocalCounter = 
-        ThreadLocal.withInitial(() -> 0);
-    
-    public static void main(String[] args) {
-        Thread thread1 = new Thread(() -> {
-            // Variables locales → Thread Stack
-            int localVar = 10;
-            
-            // Accès variable partagée → Method Area
-            sharedCounter++;
-            
-            // Accès ThreadLocal → Heap (copie dédiée)
-            threadLocalCounter.set(threadLocalCounter.get() + 1);
-            
-            // Appel méthode → Frame sur Thread Stack
-            processData(localVar);
-        });
-        
-        thread1.start();
-    }
-    
-    private static void processData(int value) {
-        // Nouvelle frame ajoutée au stack du thread
-        int result = value * 2;
-        System.out.println(result);
-    }
-}
-```
+Chaque thread Java possède ses propres zones mémoire privées (Stack, PC Register, Native Method Stack) qui lui permettent de maintenir son contexte d'exécution indépendamment des autres threads. En revanche, le Heap et la Method Area sont partagés entre tous les threads, ce qui permet la communication et le partage de données, mais nécessite également une synchronisation pour éviter les problèmes de concurrence.
 
-**Représentation mémoire lors de l'exécution** :
+Les **stacks des threads** contiennent des frames empilés : chaque frame correspond à un appel de méthode et stocke les variables locales, les opérandes et les données nécessaires à l'exécution. Quand une méthode se termine, sa frame est dépilée.
 
-```
-Thread 1 Stack:                  Heap:                    Method Area:
-┌──────────────────┐            ┌──────────────┐         ┌──────────────┐
-│ processData()    │            │ Thread obj   │         │sharedCounter │
-│ - value: 10      │            │ - name: "T1" │         │ = 1          │
-│ - result: 20     │            │ - state      │         └──────────────┘
-├──────────────────┤            ├──────────────┤
-│ lambda$main()    │            │ThreadLocal   │
-│ - localVar: 10   │───────────▶│ Thread1: 1   │
-│                  │            │ Thread2: 0   │
-└──────────────────┘            └──────────────┘
-```
+Le **PC Register** (Program Counter) de chaque thread pointe vers l'instruction bytecode en cours d'exécution, permettant à la JVM de savoir où reprendre l'exécution après un context switch.
+
+Les **ThreadLocal** stockent leurs données dans le Heap, mais chaque thread accède à sa propre copie isolée via une map interne, garantissant ainsi l'isolation des données par thread sans nécessiter de synchronisation.
 
 ---
 
 ## 2.3 Création d'un Thread : Ce qui se passe réellement
 
-### Code Java simple
+### La base : la création d'un Thread
 
 ```java
 Thread thread = new Thread(() -> {
@@ -241,10 +198,81 @@ thread.start();
 └─────────────────────────────────────────────────────────┘
 ```
 
+### Différence entre un Thread I/O wait et BLOCKED
+
+Ces deux éléments vont souvent être rencontrés dans le reste de la présentation, mais ne sont pas forcément clair pour tous.
+
+État JVM: Thread.State.BLOCKED
+
+Cause: Attend un monitor/lock (synchronized)
+
+Thread A                    Thread B
+   │                           │
+   │ synchronized(lock) {      │
+   │    // possède le lock     │
+   │                           ▼
+   │                    synchronized(lock) {
+   │                           ▲
+   │                           │
+   │                      État: BLOCKED
+   │                      (attend que A libère)
+
+
+ - Thread bloqué par la JVM en attente d'un verrou
+ - N'utilise PAS le CPU
+ - Ne peut PAS être interrompu tant que le lock n'est pas disponible
+ - État JVM spécifique : BLOCKED
+
+
+ I/O WAIT
+
+États JVM: Thread.State.WAITING ou TIMED_WAITING
+
+Cause: Attend une opération I/O système
+
+Thread
+   │
+   │ socket.read()  ───────┐
+   │                       │ Syscall vers OS
+   │                       ▼
+   │              [Attente réseau/disque]
+   │                       │
+   │                       │ OS signal: données prêtes
+   │ <─────────────────────┘
+   │ continue...
+```
+- **Thread en attente d'une ressource externe** (réseau, disque, DB)
+- **État selon l'API utilisée** : 
+  - `TIMED_WAITING` si timeout (socket.read(timeout))
+  - `WAITING` si indéfini
+  - `RUNNABLE` (techniquement, mais bloqué au niveau OS)
+- **N'utilise PAS le CPU**
+- Thread "endormi" côté OS (pas dans la run queue)
+
+### **Résumé visuel**
+```
+┌──────────────────┬─────────────────┬──────────────────┐
+│                  │ BLOCKED         │ I/O WAIT         │
+├──────────────────┼─────────────────┼──────────────────┤
+│ État JVM         │ BLOCKED         │ WAITING/         │
+│                  │                 │ TIMED_WAITING    │
+├──────────────────┼─────────────────┼──────────────────┤
+│ Cause            │ synchronized    │ socket.read()    │
+│                  │ lock contention │ DB query         │
+│                  │                 │ file I/O         │
+├──────────────────┼─────────────────┼──────────────────┤
+│ Bloqué par       │ JVM             │ OS kernel        │
+├──────────────────┼─────────────────┼──────────────────┤
+│ Libéré quand     │ Lock disponible │ I/O terminée     │
+├──────────────────┼─────────────────┼──────────────────┤
+│ Problème avec    │ Pinning si      │ Démontage auto   │
+│ Virtual Threads  │ synchronized    │ ✅ OK            │
+└──────────────────┴─────────────────┴──────────────────┘
+
 ### Visualisation avec code instrumenté
 
 ```java
-public class ThreadCreationInstrumented {
+public class ThreadCreation {
     
     public static void main(String[] args) throws InterruptedException {
         System.out.println("=== Avant création Thread Java ===");
@@ -341,7 +369,7 @@ Conclusion:
 
 ## 2.4 Cas pratique : Thread avec JDBC
 
-### Exemple d'accès base de données
+### Exemple d'accès à une base de données via JDBC
 
 ```java
 import java.sql.*;
@@ -377,7 +405,7 @@ public class JdbcThreadExample {
         Statement stmt = null;
         
         try {
-            // POINT 1: Thread obtient connexion
+            // POINT 1: Le Thread obtient une connexion
             System.out.println("[" + Thread.currentThread().getName() + 
                 "] Demande connexion DB...");
             
@@ -388,7 +416,7 @@ public class JdbcThreadExample {
             System.out.println("[" + Thread.currentThread().getName() + 
                 "] Connexion obtenue en " + connTime + "ms");
             
-            // POINT 2: Thread exécute requête (BLOQUE sur I/O réseau)
+            // POINT 2: Le Thread demande l'ouverture de la connexion (BLOQUE sur I/O réseau)
             stmt = conn.createStatement();
             
             start = System.nanoTime();
@@ -397,7 +425,7 @@ public class JdbcThreadExample {
             
             // ⚠️ ICI LE THREAD SE BLOQUE
             // Il attend la réponse du serveur PostgreSQL
-            // Pendant ce temps: 2 MB de stack inutilisés!
+            // Pendant ce temps: 2 MB de stack (HEAP donc RAM)
             ResultSet rs = stmt.executeQuery(
                 "SELECT id, name FROM users WHERE id = " + threadId
             );
@@ -449,21 +477,21 @@ Détails:
 │  • Sérialisation paramètres                     │
 └─────────────────────────────────────────────────┘
 ┌─────────────────────────────────────────────────┐
-│ 10-20ms: I/O wait (envoi requête)              │
+│ 10-20ms: I/O wait (envoi requête)               │
 │  • Écriture sur socket réseau                   │
 │  • Thread BLOQUÉ (write syscall)                │
 │  • Carrier thread pourrait faire autre chose!   │
 └─────────────────────────────────────────────────┘
 ┌─────────────────────────────────────────────────┐
-│ 20-70ms: WAIT (attente réponse DB)             │
+│ 20-70ms: WAIT (attente réponse DB)              │
 │  • Thread complètement BLOQUÉ                   │
 │  • Attend read() sur socket                     │
 │  • 2 MB de stack INUTILISÉS                     │
-│  • Le serveur DB traite la requête              │
-│  ⚠️ 50ms de pure attente = GASPILLAGE!          │
+│  • Le serveur de DB (pgsql) traite la requête   │
+│  • 50ms de pure attente                         │
 └─────────────────────────────────────────────────┘
 ┌─────────────────────────────────────────────────┐
-│ 70-80ms: I/O wait (réception réponse)          │
+│ 70-80ms: I/O wait (réception réponse)           │
 │  • Lecture socket réseau                        │
 │  • Désérialisation données                      │
 │  • Thread BLOQUÉ (read syscall)                 │
@@ -478,7 +506,7 @@ Détails:
 Bilan:
 - CPU actif: 30ms (30%)
 - I/O bloqué: 70ms (70%)
-- Efficacité: MAUVAISE (70% de gaspillage)
+- Efficacité: MAUVAISE (70% de gaspillage de temps)
 ```
 
 ---
@@ -582,7 +610,7 @@ Problème:
 */
 ```
 
-### Comparaison : approche asynchrone (sans VT)
+### Comparaison : approche asynchrone (avant java 21 Project LOOM)
 
 ```java
 public class HttpAsyncExample {
@@ -890,48 +918,48 @@ Observation:
 ┌─────────────────────────────────────────────────────┐
 │              ExecutorService                        │
 │                                                     │
-│  ┌───────────────────────────────────────────┐    │
-│  │         Work Queue (BlockingQueue)        │    │
-│  │                                           │    │
-│  │  [Task 5] [Task 6] [Task 7] [Task 8] ... │    │
-│  │                                           │    │
-│  │  Tâches en attente d'exécution            │    │
-│  └───────────┬───────────────────────────────┘    │
+│  ┌───────────────────────────────────────────┐      │
+│  │         Work Queue (BlockingQueue)        │      │
+│  │                                           │      │
+│  │  [Task 5] [Task 6] [Task 7] [Task 8] ...  │      │
+│  │                                           │      │
+│  │  Tâches en attente d'exécution            │      │
+│  └───────────┬───────────────────────────────┘      │
 │              │                                      │
 │              │ take()                               │
 │              ▼                                      │
-│  ┌───────────────────────────────────────────┐    │
-│  │         Thread Pool (Workers)             │    │
-│  │                                           │    │
-│  │  ┌──────────┐  ┌──────────┐             │    │
-│  │  │ Thread 1 │  │ Thread 2 │  ← Platform │    │
-│  │  │ (Worker) │  │ (Worker) │     Threads │    │
-│  │  │          │  │          │             │    │
-│  │  │ Task 1   │  │ Task 2   │             │    │
-│  │  └──────────┘  └──────────┘             │    │
-│  │                                           │    │
-│  │  ┌──────────┐  ┌──────────┐             │    │
-│  │  │ Thread 3 │  │ Thread 4 │             │    │
-│  │  │ (Worker) │  │ (Worker) │             │    │
-│  │  │          │  │          │             │    │
-│  │  │ Task 3   │  │ Task 4   │             │    │
-│  │  └──────────┘  └──────────┘             │    │
-│  │                                           │    │
-│  └───────────────────────────────────────────┘    │
+│  ┌───────────────────────────────────────────┐      │
+│  │         Thread Pool (Workers)             │      │
+│  │                                           │      │
+│  │  ┌──────────┐  ┌──────────┐               │      │
+│  │  │ Thread 1 │  │ Thread 2 │  ← Platform   │      │
+│  │  │ (Worker) │  │ (Worker) │     Threads   │      │
+│  │  │          │  │          │               │      │
+│  │  │ Task 1   │  │ Task 2   │               │      │
+│  │  └──────────┘  └──────────┘               │      │
+│  │                                           │      │
+│  │  ┌──────────┐  ┌──────────┐               │      │
+│  │  │ Thread 3 │  │ Thread 4 │               │      │
+│  │  │ (Worker) │  │ (Worker) │               │      │
+│  │  │          │  │          │               │      │
+│  │  │ Task 3   │  │ Task 4   │               │      │
+│  │  └──────────┘  └──────────┘               │      │
+│  │                                           │      │
+│  └───────────────────────────────────────────┘      │
 │                                                     │
 └─────────────────────────────────────────────────────┘
                     │
                     │ Mapping 1:1
                     ▼
-┌─────────────────────────────────────────────────────┐
-│              Operating System                       │
-│                                                     │
+┌──────────────────────────────────────────────────────────┐
+│              Operating System                            │
+│                                                          │
 │  [OS Thread 1] [OS Thread 2] [OS Thread 3] [OS Thread 4] │
-│       │             │             │             │         │
-│       └─────────────┴─────────────┴─────────────┘         │
-│                     │                                      │
-│              CPU Scheduler                                 │
-└─────────────────────────────────────────────────────────────┘
+│       │             │             │             │        │
+│       └─────────────┴─────────────┴─────────────┘        │
+│                     │                                    │
+│              CPU Scheduler                               │
+└──────────────────────────────────────────────────────────┘
 ```
 
 ### Types de Thread Pools
@@ -1088,392 +1116,6 @@ Comment ça marche:
 - Un seul thread peut détenir le monitor à la fois
 - Les autres threads sont BLOQUÉS (état BLOCKED)
 */
-```
-
-### Visualisation du monitor
-
-```
-Timeline avec synchronized:
-
-Thread 1: ████░░░░░░░░░░░░████░░░░░░░░████
-Thread 2: ░░░░████░░░░░░░░░░░░████░░░░░░░░
-Thread 3: ░░░░░░░░████░░░░░░░░░░░░████░░░░
-          │   │   │   │   │   │   │   │
-          Lock│   │Unlock│   │Unlock│   │
-              Lock│   Lock│       Lock│
-                  Unlock│           Unlock
-
-Légende:
-█ = Thread possède le lock (exécution)
-░ = Thread attend le lock (BLOCKED)
-
-Problème:
-- Beaucoup de temps d'attente
-- Context switching fréquent
-- Contention du lock
-```
-
-### Monitor détaillé au niveau JVM
-
-```
-┌─────────────────────────────────────────────────────┐
-│            Object Monitor (intrinsic lock)          │
-├─────────────────────────────────────────────────────┤
-│                                                     │
-│  Owner Thread: Thread-3                            │
-│  (thread qui détient actuellement le lock)          │
-│                                                     │
-│  ┌───────────────────────────────────────────┐    │
-│  │         Entry Set (BLOCKED)                │    │
-│  │                                            │    │
-│  │  [Thread-1] [Thread-5] [Thread-8] ...     │    │
-│  │                                            │    │
-│  │  Threads en attente du lock                │    │
-│  │  État: BLOCKED                             │    │
-│  └───────────────────────────────────────────┘    │
-│                                                     │
-│  ┌───────────────────────────────────────────┐    │
-│  │         Wait Set (WAITING)                 │    │
-│  │                                            │    │
-│  │  [Thread-2] [Thread-4] ...                 │    │
-│  │                                            │    │
-│  │  Threads ayant appelé wait()               │    │
-│  │  État: WAITING                             │    │
-│  └───────────────────────────────────────────┘    │
-│                                                     │
-└─────────────────────────────────────────────────────┘
-```
-
-### Exemple wait/notify
-
-```java
-public class WaitNotifyExample {
-    
-    private static final Object lock = new Object();
-    private static boolean dataReady = false;
-    private static String sharedData = null;
-    
-    public static void main(String[] args) throws InterruptedException {
-        
-        // Thread consommateur
-        Thread consumer = new Thread(() -> {
-            synchronized (lock) {
-                System.out.println("[Consumer] En attente de données...");
-                
-                try {
-                    // wait() libère le lock et met le thread en WAITING
-                    while (!dataReady) {
-                        lock.wait();
-                    }
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                    return;
-                }
-                
-                System.out.println("[Consumer] Données reçues: " + sharedData);
-            }
-        }, "Consumer");
-        
-        // Thread producteur
-        Thread producer = new Thread(() -> {
-            try {
-                Thread.sleep(1000); // Simule préparation
-            } catch (InterruptedException e) {
-                return;
-            }
-            
-            synchronized (lock) {
-                System.out.println("[Producer] Production de données...");
-                sharedData = "Hello from Producer!";
-                dataReady = true;
-                
-                // notify() réveille un thread dans le Wait Set
-                lock.notify();
-                System.out.println("[Producer] notify() envoyé");
-            }
-        }, "Producer");
-        
-        consumer.start();
-        Thread.sleep(100); // S'assurer que consumer attend
-        producer.start();
-        
-        consumer.join();
-        producer.join();
-    }
-}
-
-/* Output:
-
-[Consumer] En attente de données...
-[Producer] Production de données...
-[Producer] notify() envoyé
-[Consumer] Données reçues: Hello from Producer!
-
-Séquence:
-1. Consumer prend le lock
-2. Consumer appelle wait() → libère le lock, passe en WAITING
-3. Producer prend le lock (libéré par consumer)
-4. Producer modifie les données
-5. Producer appelle notify() → réveille consumer
-6. Producer libère le lock
-7. Consumer reprend le lock, sort de wait()
-8. Consumer traite les données
-*/
-```
-
----
-
-## 2.9 Thread Locals : Isolation par thread
-
-### Concept ThreadLocal
-
-```java
-public class ThreadLocalExample {
-    
-    // Chaque thread a sa propre copie de cette variable
-    private static ThreadLocal<Integer> threadId = ThreadLocal.withInitial(() -> 0);
-    private static ThreadLocal<String> username = new ThreadLocal<>();
-    
-    public static void main(String[] args) throws InterruptedException {
-        
-        Thread thread1 = new Thread(() -> {
-            // Thread 1 définit ses valeurs
-            threadId.set(1);
-            username.set("Alice");
-            
-            System.out.println("[Thread 1] threadId: " + threadId.get());
-            System.out.println("[Thread 1] username: " + username.get());
-            
-            doWork();
-        }, "Thread-1");
-        
-        Thread thread2 = new Thread(() -> {
-            // Thread 2 définit ses propres valeurs
-            threadId.set(2);
-            username.set("Bob");
-            
-            System.out.println("[Thread 2] threadId: " + threadId.get());
-            System.out.println("[Thread 2] username: " + username.get());
-            
-            doWork();
-        }, "Thread-2");
-        
-        thread1.start();
-        thread2.start();
-        
-        thread1.join();
-        thread2.join();
-    }
-    
-    private static void doWork() {
-        // Chaque thread voit ses propres valeurs
-        System.out.println("[" + Thread.currentThread().getName() + 
-            "] Dans doWork() - username: " + username.get());
-    }
-}
-
-/* Output:
-
-[Thread 1] threadId: 1
-[Thread 1] username: Alice
-[Thread-1] Dans doWork() - username: Alice
-[Thread 2] threadId: 2
-[Thread 2] username: Bob
-[Thread-2] Dans doWork() - username: Bob
-
-Chaque thread a son propre contexte isolé!
-*/
-```
-
-### Architecture ThreadLocal en mémoire
-
-```
-┌─────────────────────────────────────────────────────┐
-│                    Heap Memory                      │
-├─────────────────────────────────────────────────────┤
-│                                                     │
-│  Thread Object 1                                    │
-│  ┌───────────────────────────────────────────┐    │
-│  │ threadLocals: ThreadLocalMap              │    │
-│  │   ┌─────────────────────────────────┐     │    │
-│  │   │ Entry[0]: threadId → 1          │     │    │
-│  │   │ Entry[1]: username → "Alice"    │     │    │
-│  │   └─────────────────────────────────┘     │    │
-│  └───────────────────────────────────────────┘    │
-│                                                     │
-│  Thread Object 2                                    │
-│  ┌───────────────────────────────────────────┐    │
-│  │ threadLocals: ThreadLocalMap              │    │
-│  │   ┌─────────────────────────────────┐     │    │
-│  │   │ Entry[0]: threadId → 2          │     │    │
-│  │   │ Entry[1]: username → "Bob"      │     │    │
-│  │   └─────────────────────────────────┘     │    │
-│  └───────────────────────────────────────────┘    │
-│                                                     │
-│  ThreadLocal Objects (static, partagés)            │
-│  ┌─────────────┐  ┌─────────────┐                 │
-│  │ threadId    │  │ username    │                  │
-│  │ (référence) │  │ (référence) │                  │
-│  └─────────────┘  └─────────────┘                  │
-│                                                     │
-└─────────────────────────────────────────────────────┘
-
-Note: Le ThreadLocal lui-même est partagé,
-mais chaque Thread a sa propre Map de valeurs.
-```
-
-### Cas d'usage pratique : Contexte de requête
-
-```java
-public class RequestContext {
-    
-    // Contexte de requête HTTP simulé
-    private static ThreadLocal<String> requestId = new ThreadLocal<>();
-    private static ThreadLocal<String> userId = new ThreadLocal<>();
-    private static ThreadLocal<Long> startTime = new ThreadLocal<>();
-    
-    public static void setContext(String reqId, String user) {
-        requestId.set(reqId);
-        userId.set(user);
-        startTime.set(System.currentTimeMillis());
-    }
-    
-    public static void clearContext() {
-        requestId.remove(); // Important: éviter memory leaks!
-        userId.remove();
-        startTime.remove();
-    }
-    
-    public static String getRequestId() {
-        return requestId.get();
-    }
-    
-    public static String getUserId() {
-        return userId.get();
-    }
-    
-    public static long getElapsedTime() {
-        Long start = startTime.get();
-        return start != null ? System.currentTimeMillis() - start : 0;
-    }
-    
-    // Simulation serveur HTTP
-    public static void main(String[] args) throws InterruptedException {
-        
-        // Simuler 3 requêtes HTTP concurrentes
-        Thread[] requests = new Thread[3];
-        
-        for (int i = 0; i < 3; i++) {
-            final int requestNum = i;
-            requests[i] = new Thread(() -> {
-                try {
-                    // Initialiser contexte pour ce thread
-                    setContext("REQ-" + requestNum, "user-" + requestNum);
-                    
-                    System.out.println("[" + getRequestId() + "] Début requête");
-                    
-                    // Simuler traitement
-                    processRequest();
-                    
-                    // Simuler appel service
-                    callDatabaseService();
-                    
-                    System.out.println("[" + getRequestId() + 
-                        "] Requête terminée en " + getElapsedTime() + "ms");
-                    
-                } finally {
-                    // Nettoyer contexte (important!)
-                    clearContext();
-                }
-            }, "Request-Handler-" + i);
-            
-            requests[i].start();
-        }
-        
-        for (Thread t : requests) {
-            t.join();
-        }
-    }
-    
-    private static void processRequest() throws InterruptedException {
-        System.out.println("[" + getRequestId() + "] Traitement pour user: " + 
-            getUserId());
-        Thread.sleep(100);
-    }
-    
-    private static void callDatabaseService() throws InterruptedException {
-        // Le contexte est automatiquement disponible !
-        System.out.println("[" + getRequestId() + "] Appel DB pour user: " + 
-            getUserId());
-        Thread.sleep(200);
-    }
-}
-
-/* Output:
-
-[REQ-0] Début requête
-[REQ-1] Début requête
-[REQ-2] Début requête
-[REQ-0] Traitement pour user: user-0
-[REQ-1] Traitement pour user: user-1
-[REQ-2] Traitement pour user: user-2
-[REQ-0] Appel DB pour user: user-0
-[REQ-1] Appel DB pour user: user-1
-[REQ-2] Appel DB pour user: user-2
-[REQ-0] Requête terminée en 302ms
-[REQ-1] Requête terminée en 301ms
-[REQ-2] Requête terminée en 300ms
-
-Avantage: Pas besoin de passer requestId et userId
-           en paramètre partout!
-*/
-```
-
----
-
-## 2.10 Récapitulatif : Thread Platform en action
-
-### Synthèse visuelle
-
-```
-┌─────────────────────────────────────────────────────┐
-│          Thread Java (Platform Thread)              │
-│                                                     │
-│  ┌─────────────────────────────────────────────┐  │
-│  │ Objet Thread (Heap JVM)                     │  │
-│  │ - name, priority, state                     │  │
-│  │ - target (Runnable)                         │  │
-│  │ - threadLocals (Map)                        │  │
-│  └────────────┬────────────────────────────────┘  │
-│               │                                     │
-│               │ Référence vers                      │
-│               ▼                                     │
-│  ┌─────────────────────────────────────────────┐  │
-│  │ Native Thread (JVM internal)                │  │
-│  │ - eetop (pointeur vers OS thread)           │  │
-│  │ - stack base/size                           │  │
-│  └────────────┬────────────────────────────────┘  │
-└───────────────┼─────────────────────────────────────┘
-                │ JNI
-┌───────────────▼─────────────────────────────────────┐
-│ OS Thread (pthread_t / HANDLE)                      │
-│                                                     │
-│ - Thread ID                                         │
-│ - Stack: 2 MB                                       │
-│ - TCB (Thread Control Block)                        │
-│ - Registres CPU sauvegardés                         │
-│ - Priority, affinity                                │
-└───────────────┬─────────────────────────────────────┘
-                │ Scheduler
-┌───────────────▼─────────────────────────────────────┐
-│ CPU Core                                            │
-└─────────────────────────────────────────────────────┘
-
-Coûts:
-- Mémoire: ~2 MB par thread
-- Création: ~0.5 ms
-- Context switch: ~5 µs
-- Limite: ~5000 threads
 ```
 
 ### Points clés à retenir

@@ -8,7 +8,7 @@
 
 Un **thread** (ou fil d'exécution) est la plus petite unité d'exécution qu'un système d'exploitation peut gérer. C'est une séquence d'instructions qui peut être exécutée de manière indépendante.
 
-### Analogie du restaurant 🍽️
+### Un exemple par analogie (le restaurant) 🍽️
 
 Imaginez un restaurant :
 - **Le restaurant** = votre application
@@ -18,7 +18,7 @@ Imaginez un restaurant :
 
 Plus vous avez de serveurs, plus vous pouvez servir de clients simultanément. Mais :
 - Chaque serveur coûte cher (salaire)
-- Trop de serveurs dans une petite cuisine = chaos
+- Trop de serveurs dans une petite cuisine entraîne des complications (Chaud devant !)
 - Les serveurs doivent se coordonner (context switching)
 
 ---
@@ -31,41 +31,41 @@ Plus vous avez de serveurs, plus vous pouvez servir de clients simultanément. M
 ┌─────────────────────────────────────────────────┐
 │         Application (Processus)                 │
 │                                                 │
-│  ┌────────┐  ┌────────┐  ┌────────┐            │
-│  │Thread 1│  │Thread 2│  │Thread 3│            │
-│  │ Stack  │  │ Stack  │  │ Stack  │            │
-│  │ ~2 MB  │  │ ~2 MB  │  │ ~2 MB  │            │
-│  └───┬────┘  └───┬────┘  └───┬────┘            │
+│  ┌────────┐  ┌────────┐  ┌────────┐             │
+│  │Thread 1│  │Thread 2│  │Thread 3│             │
+│  │ Stack  │  │ Stack  │  │ Stack  │             │
+│  │ ~2 MB  │  │ ~2 MB  │  │ ~2 MB  │             │
+│  └───┬────┘  └───┬────┘  └───┬────┘             │
 │      │           │           │                  │
 └──────┼───────────┼───────────┼──────────────────┘
        │           │           │
        │  Appels système (syscalls)
        │           │           │
-┌──────▼───────────▼───────────▼──────────────────┐
-│           Kernel Space (OS)                     │
-│                                                 │
-│  ┌──────────────────────────────────┐          │
-│  │    Thread Scheduler               │          │
-│  │  - Gère les priorités            │          │
-│  │  - Context switching              │          │
-│  │  - Allocation CPU time            │          │
-│  └──────────────────────────────────┘          │
-│                                                 │
-│  Thread Control Blocks (TCB):                  │
+┌──────▼───────────▼───────────▼────────────────┐
+│           Kernel Space (OS)                   │
+│                                               │
+│  ┌──────────────────────────────────┐         │
+│  │    Thread Scheduler              │         │
+│  │  - Gère les priorités            │         │
+│  │  - Context switching             │         │
+│  │  - Allocation CPU time           │         │
+│  └──────────────────────────────────┘         │
+│                                               │
+│  Thread Control Blocks (TCB):                 │
 │  ┌─────────┐ ┌─────────┐ ┌─────────┐          │
 │  │ TCB #1  │ │ TCB #2  │ │ TCB #3  │          │
 │  │ State   │ │ State   │ │ State   │          │
 │  │ Priority│ │ Priority│ │ Priority│          │
-│  │ Registers│ │ Registers│ │ Registers│        │
+│  │Registers│ │Registers│ │Registers│          │
 │  └─────────┘ └─────────┘ └─────────┘          │
-└──────┬───────────┬───────────┬──────────────────┘
+└──────┬───────────┬───────────┬────────────────┘
        │           │           │
 ┌──────▼───────────▼───────────▼──────────────────┐
 │              CPU Hardware                       │
 │                                                 │
-│   ┌────────┐  ┌────────┐  ┌────────┐          │
-│   │ Core 1 │  │ Core 2 │  │ Core 3 │          │
-│   └────────┘  └────────┘  └────────┘          │
+│   ┌────────┐  ┌────────┐  ┌────────┐            │
+│   │ Core 1 │  │ Core 2 │  │ Core 3 │            │
+│   └────────┘  └────────┘  └────────┘            │
 │                                                 │
 └─────────────────────────────────────────────────┘
 ```
@@ -74,14 +74,31 @@ Plus vous avez de serveurs, plus vous pouvez servir de clients simultanément. M
 
 ## 1.3 Caractéristiques d'un Thread OS (Platform Thread)
 
-| Caractéristique | Valeur typique | Explication |
-|-----------------|----------------|-------------|
-| **Mémoire Stack** | 1-2 MB | Espace mémoire alloué pour les variables locales et l'historique d'appels |
-| **Temps de création** | 0.2 - 1 ms | Temps nécessaire pour créer un nouveau thread via l'OS |
-| **Context Switching** | 1 - 10 µs | Temps pour sauvegarder l'état d'un thread et restaurer un autre |
-| **Thread Control Block** | ~1.5 KB | Métadonnées du thread (ID, priorité, registres CPU, etc.) |
-| **Limite pratique** | 1000-5000 | Nombre max de threads avant dégradation des performances |
-| **Gestion** | OS Kernel | C'est le système d'exploitation qui gère la vie du thread |
+# Caractéristiques des Threads
+
+**Mémoire Stack**
+- Valeur typique : 1-2 MB
+- Espace mémoire alloué pour les variables locales et l'historique d'appels
+
+**Temps de création**
+- Valeur typique : 0.2 - 1 ms
+- Temps nécessaire pour créer un nouveau thread via l'OS
+
+**Context Switching**
+- Valeur typique : 1 - 10 µs
+- Temps pour sauvegarder l'état d'un thread et restaurer un autre
+
+**Thread Control Block**
+- Valeur typique : ~1.5 KB
+- Métadonnées du thread (ID, priorité, registres CPU, etc.)
+
+**Limite pratique**
+- Valeur typique : 1000-5000 (Dépend de la plateforme physique)
+- Nombre max de threads avant dégradation des performances
+
+**Gestion**
+- Valeur typique : OS Kernel
+- C'est le système d'exploitation qui gère la vie du thread
 
 ---
 
@@ -129,26 +146,8 @@ Plus vous avez de serveurs, plus vous pouvez servir de clients simultanément. M
 Lorsque le CPU passe d'un thread à un autre, il doit :
 1. **Sauvegarder** l'état du thread actuel (registres, program counter, etc.)
 2. **Restaurer** l'état du thread suivant
-3. **Vider/recharger** les caches CPU (coûteux !)
+3. **Vider/recharger** les caches CPU (Peut-être couteux en ressource)
 
-### Exemple visuel sur une timeline
-
-```
-Timeline sur 1 CPU core avec 4 threads actifs:
-
-Thread A: ████████░░░░░░░░████████░░░░░░░░████████
-Thread B: ░░░░░░░░████████░░░░░░░░████████░░░░░░░░
-Thread C: ░░░░░░░░░░░░░░░░████████░░░░░░░░████████
-Thread D: ████████░░░░░░░░░░░░░░░░████████░░░░░░░░
-Switch:   ▲───────▲───────▲───────▲───────▲───────
-          Context Context Context Context Context
-          Switch  Switch  Switch  Switch  Switch
-
-Légende:
-█ = Thread en exécution (travail utile)
-░ = Thread en attente
-▲ = Context Switch (temps perdu)
-```
 
 ### Impact du nombre de threads
 
@@ -162,17 +161,17 @@ Overhead: ~0% (parfait!)
 
 Scénario 2: 100 threads sur 4 cores
 ┌────────────────────────────────────────┐
-│ 100 threads se partagent 4 cores      │
+│ 100 threads se partagent 4 cores       │
 │ Context switching constant             │
 │ Overhead: ~10-20%                      │
 └────────────────────────────────────────┘
 
 Scénario 3: 10,000 threads sur 4 cores
 ┌────────────────────────────────────────┐
-│ 10,000 threads se battent pour 4 cores│
-│ Context switching infernal             │
-│ Overhead: 50-80% (catastrophique!)     │
-│ CPU occupe son temps à switcher       │
+│ 10,000 threads se battent pour 4 cores │
+│ Context switching qui surcharge le CPU │
+│ Overhead: 50-80%                       │
+│ CPU en pleine limitation               │
 └────────────────────────────────────────┘
 ```
 
@@ -277,10 +276,15 @@ Note: Cela correspond au stack size du thread
 
 ### Pourquoi ne peut-on pas avoir un million de threads OS ?
 
+Logiquement, on pourrait se dire que la limite matérielle peut facilement être dépassée avec les technologies modernes ?
+Essayons de comprendre pourquoi c'est faux.
+
 ```
 Calcul simple:
 - 1 thread = 2 MB de stack
-- 1,000,000 threads = 2,000,000 MB = 2 TB de RAM
+- 1,000,000 threads = 2,000,000 MB = 2 TB de RAM : 
+    Avant même de parler de puissance de calcul CPU, la RAM pose problème. 
+    La RAM est un des éléments matériel les plus volatiles en terme de prix sur le marché, les prix varies du simple au double sur un trimestre. 
 
 Même avec 128 GB de RAM:
 - Max théorique: ~64,000 threads
@@ -292,38 +296,6 @@ Au-delà:
 - Context switching overhead > 50%
 - Le système devient inutilisable
 ```
-
-### Démonstration visuelle
-
-```
-Machine: 16 GB RAM, 8 CPU cores
-
-┌───────────────────────────────────────────┐
-│ Nombre de threads vs Performance         │
-├───────────────────────────────────────────┤
-│                                           │
-│ Perf │                                    │
-│  %   │     ****                           │
-│ 100  │    *    *                          │
-│      │   *      *                         │
-│  80  │  *        *                        │
-│      │ *          *                       │
-│  60  │*            **                     │
-│      │               ***                  │
-│  40  │                  ****              │
-│      │                      *****         │
-│  20  │                           ******   │
-│      │                                ****│
-│   0  └──┬────┬────┬────┬────┬────┬───────│
-│        10   100  500  1K   5K   10K      │
-│           Nombre de threads               │
-└───────────────────────────────────────────┘
-
-Zone optimale: 10-100 threads (proche du nb de cores)
-Zone dégradée: 500-1000 threads
-Zone critique: > 5000 threads
-```
-
 ---
 
 ## 1.8 Concepts clés à retenir
@@ -333,7 +305,7 @@ Zone critique: > 5000 threads
 1. **Un thread OS est lourd**
    - ~2 MB de mémoire
    - Coût de création élevé
-   - Géré par le kernel (pas par votre application)
+   - Géré par le kernel (donc par la machine hôte)
 
 2. **Le context switching a un coût**
    - Plus de threads = plus de switching
@@ -350,49 +322,6 @@ Zone critique: > 5000 threads
 ### 🎯 Le problème à résoudre
 
 > Comment gérer des **dizaines de milliers de tâches concurrentes** avec seulement quelques **centaines de threads OS** ?
-
-**Réponse : Les Virtual Threads !** (Chapitres suivants)
-
----
-
-## 1.9 Exemple pratique : Le problème concret
-
-```java
-// Serveur Web classique
-@RestController
-public class ApiController {
-    
-    @GetMapping("/data")
-    public Response getData() {
-        // 1. Requête DB: thread bloque 50ms
-        Data data = database.query();
-        
-        // 2. Appel API externe: thread bloque 100ms
-        ExternalData external = httpClient.get("https://api.example.com");
-        
-        // 3. Processing: thread actif 10ms
-        Result result = process(data, external);
-        
-        return new Response(result);
-    }
-}
-
-// Timeline pour UNE requête:
-// ████░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░████
-// ▲                                                         ▲
-// CPU                                                      CPU
-// actif                                                   actif
-// 10ms         Bloqué sur I/O: 150ms                     10ms
-//
-// Total: 160ms dont 150ms de BLOCAGE (93% de gaspillage!)
-
-// Avec 200 threads max:
-// - Si 200 requêtes arrivent simultanément
-// - Les 200 threads sont TOUS BLOQUÉS 93% du temps
-// - CPU utilization: ~7%
-// - Mais on ne peut pas gérer plus de 200 requêtes simultanées!
-```
-
 ---
 
 [🏠 Accueil](../index.md) | [📋 Sommaire](../sommaire.md) | [➡️ Suivant: JVM et Platform Threads](02-jvm-platform-threads.md)
