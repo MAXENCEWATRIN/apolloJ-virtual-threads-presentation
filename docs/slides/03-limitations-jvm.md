@@ -21,9 +21,9 @@ Serveur HTTP classique (Tomcat, Jetty, etc.)
 │  ...                                            │
 │  Client 200 → [Thread 200] → Handler → Response │
 │                                                 │
-│  ⚠️ Client 201 → [QUEUE] En attente...          │
-│  ⚠️ Client 202 → [QUEUE] En attente...          |
-│  ⚠️ Client 203 → [QUEUE] En attente...          |
+│   Client 201 → [QUEUE] En attente...            │
+│   Client 202 → [QUEUE] En attente...            |
+│   Client 203 → [QUEUE] En attente...            |
 │                                                 │
 └─────────────────────────────────────────────────┘
 
@@ -50,10 +50,10 @@ public class ThreadPerRequestDemo {
     
     public static void main(String[] args) throws IOException {
         
-        // Serveur avec pool LIMITÉ à 10 threads
         HttpServer server = HttpServer.create(new InetSocketAddress(8080), 0);
         
         // Thread pool de 10 threads seulement
+        // Donc 11 tâches servlet impossible  
         ThreadPoolExecutor executor = new ThreadPoolExecutor(
             10,  // Core pool size
             10,  // Max pool size
@@ -63,7 +63,7 @@ public class ThreadPerRequestDemo {
         
         server.setExecutor(executor);
         
-        // Handler qui simule I/O bloquant
+        // Handler qui simule un I/O bloquant classique dans un controller (SpringRestController par exemple)
         server.createContext("/api/data", exchange -> {
             int active = activeRequests.incrementAndGet();
             int queued = executor.getQueue().size();
@@ -75,7 +75,7 @@ public class ThreadPerRequestDemo {
             
             try {
                 // Simulation I/O bloquant (DB, API externe, etc.)
-                Thread.sleep(5000); // 5 secondes de blocage!
+                Thread.sleep(5000);
                 
                 String response = String.format(
                     "Traité par %s (Active: %d, Queue: %d)",
@@ -110,16 +110,18 @@ public class ThreadPerRequestDemo {
         });
         
         server.start();
-        System.out.println("Serveur démarré sur http://localhost:8080");
+        System.out.println("Serveur démarré sur port local");
         System.out.println("Thread pool: 10 threads max");
         System.out.println("Queue: 50 requêtes max");
-        System.out.println("\nTestez avec: curl http://localhost:8080/api/data");
+        System.out.println("\ à tester sur http://localhost:8080/api/data GET");
+        System.out.println("\ à visualiser sur http://localhost:8080/stats GET");
     }
 }
 
-/* Test de charge (dans un autre terminal):
+/* Test de charge :
 
-# Envoyer 20 requêtes simultanées
+# Envoyer 20 requêtes simultanées de n'importe quel moyen
+//TODO : fournir un petit script
 for i in {1..20}; do
   curl http://localhost:8080/api/data &
 done
@@ -136,46 +138,12 @@ Observation:
 • Les 10 premiers threads traitent immédiatement
 • Les 10 suivants attendent dans la queue
 • Latence requête 11-20: +5 secondes (temps d'attente)
-• Si > 60 requêtes: RejectedExecutionException!
+• Si > 60 requêtes: RejectedExecutionException! (60 = 50 queue + 10 traitées)
 */
 ```
-
-### Impact sur la latence
-
-```
-Scénario: 1000 requêtes/seconde avec pool de 200 threads
-Temps traitement par requête: 500ms (dont 450ms I/O bloquant)
-
-┌─────────────────────────────────────────────────────┐
-│         Latence en fonction du nombre de clients    │
-├─────────────────────────────────────────────────────┤
-│                                                     │
-│ Latence                                             │
-│  (ms)                                               │
-│ 5000│                              ****             │
-│     │                         *****                 │
-│ 4000│                    *****                      │
-│     │               *****                           │
-│ 3000│          *****                                │
-│     │     *****                                     │
-│ 2000│ ****                                          │
-│ 1000│***                                            │
-│  500│                                               │
-│    0└─┬─────┬─────┬─────┬─────┬─────┬─────┬───    │
-│      0    200   400   600   800  1000  1200        │
-│              Requêtes simultanées                   │
-└─────────────────────────────────────────────────────┘
-
-Interprétation:
-• 0-200 clients: Latence stable (~500ms)
-• 200-400 clients: Latence double (~1000ms) - queueing
-• 400+ clients: Latence explose (> 3000ms)
-• > 1000 clients: Timeout ou crash
-```
-
 ---
 
-## 3.2 Le coût du Context Switching intensif
+## 3.2 Le coût du Context Switching intensif (POUR APPROFONDIR)
 
 ### Benchmark : Impact du nombre de threads
 
@@ -289,7 +257,7 @@ Le CPU passe plus de temps à switcher qu'à travailler!
 */
 ```
 
-### Visualisation du CPU usage
+### Visualisation du CPU usage 
 
 ```
 CPU Utilization avec 10 threads (optimal):
@@ -368,7 +336,7 @@ public class ThreadMemoryLimit {
             while (true) {
                 Thread t = new Thread(() -> {
                     try {
-                        // Dormir indéfiniment
+                        // On endort le Thread nouvellement créé indéfiniment
                         Thread.sleep(Long.MAX_VALUE);
                     } catch (InterruptedException e) {
                         Thread.currentThread().interrupt();
@@ -387,17 +355,15 @@ public class ThreadMemoryLimit {
                 }
             }
         } catch (OutOfMemoryError e) {
-            System.out.println("\n❌ OutOfMemoryError atteint!");
+            System.out.println("\n OutOfMemoryError atteint!");
             System.out.println("Nombre max de threads: " + count);
             
             long usedMemory = runtime.totalMemory() - runtime.freeMemory();
             System.out.println("Mémoire utilisée: " + usedMemory / 1024 / 1024 + " MB");
-            System.out.println("Mémoire par thread: " + 
-                (usedMemory / count / 1024) + " KB");
+            System.out.println("Mémoire par thread: " + (usedMemory / count / 1024) + " KB");
             
         } finally {
-            // Nettoyer
-            System.out.println("\nInterruption des threads...");
+            System.out.println("\nInterruption des threads, démo terminée...");
             threads.forEach(Thread::interrupt);
         }
     }
@@ -441,12 +407,12 @@ Avec Platform Threads:
 ┌────────────────────────────────────────┐
 │ API Gateway                            │
 │ • 200 threads → 200 connexions max     │
-│ • Les 9,800 autres en QUEUE ❌         │
+│ • Les 9,800 autres en QUEUE            │
 └────────────────────────────────────────┘
 ┌────────────────────────────────────────┐
 │ User Service                           │
 │ • 200 threads → 200 connexions max     │
-│ • Les 4,800 autres en QUEUE ❌         │
+│ • Les 4,800 autres en QUEUE            │
 └────────────────────────────────────────┘
 
 Solution actuelle (coûteuse):
@@ -458,7 +424,7 @@ Solution actuelle (coûteuse):
 
 ---
 
-## 3.4 I/O Bloquant : Le grand gaspillage
+## 3.4 I/O Bloquant : Le grand gaspillage (Pour approfondir)
 
 ### Analyse d'une application réelle
 
@@ -632,30 +598,9 @@ Analyse d'efficacité:
 */
 ```
 
-### Timeline visuelle d'une requête
-
-```
-Thread Platform - Timeline (285ms total):
-
-0ms        50ms       170ms    180ms 195ms     275ms 285ms
-│          │          │        │     │         │     │
-├──────────┼──────────┼────────┼─────┼─────────┼─────┤
-│          │          │        │     │         │     │
-CPU  I/O   CPU  I/O   CPU I/O  CPU   I/O   CPU I/O  CPU
- 5ms 50ms  120ms 10ms 15ms     80ms  5ms
-
-Détail:
-█ = CPU actif (20ms total = 7%)
-░ = I/O bloqué (265ms total = 93%)
-
-███░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░██░░░░░░░░░░░░░█░░░░░░░░░░░░░░░░░░░░░░░██
-
-Le thread passe 93% de son temps à NE RIEN FAIRE!
-```
-
 ---
 
-## 3.5 Cas d'usage critiques
+## 3.5 Cas d'usage critiques (Pour approfondir)
 
 ### 3.5.1 WebSocket et Connexions longues
 
@@ -676,10 +621,10 @@ public class ChatWebSocket {
         System.out.println("Nouvelle connexion: " + session.getId());
         System.out.println("Connexions actives: " + sessions.size());
         
-        // ⚠️ PROBLÈME CRITIQUE:
+        // PROBLÈME CRITIQUE:
         // Chaque connexion WebSocket = 1 thread Platform BLOQUÉ
         // Le thread reste ouvert tant que la connexion est active
-        // Peut être des heures ou des jours!
+        // Un websocket reste ouvert sur des périodes de temps extrêmement longue 
         
         // Avec 200 threads max:
         // 200 connexions WebSocket = thread pool SATURÉ
@@ -688,7 +633,6 @@ public class ChatWebSocket {
     
     @OnMessage
     public void onMessage(String message, Session session) {
-        // Broadcaster à tous
         sessions.forEach(s -> {
             try {
                 s.getBasicRemote().sendText(message);
@@ -732,15 +676,12 @@ public class BatchProcessingProblem {
     
     public static void main(String[] args) throws Exception {
         
-        // Scénario: Traiter 100,000 enregistrements
+        // Scénario: Traiter 100,000 enregistrements comme on pourrait le faire en entreprise sur un batch
         List<Integer> records = new ArrayList<>();
         for (int i = 0; i < 100_000; i++) {
             records.add(i);
         }
         
-        System.out.println("=== Traitement avec Platform Threads ===\n");
-        
-        // Approche 1: Thread pool fixe (50 threads)
         System.out.println("Approche 1: Pool fixe de 50 threads");
         long start = System.currentTimeMillis();
         
@@ -751,7 +692,6 @@ public class BatchProcessingProblem {
             futures.add(executor.submit(() -> processRecord(record)));
         }
         
-        // Attendre tous les résultats
         for (Future<String> future : futures) {
             future.get();
         }
@@ -762,7 +702,8 @@ public class BatchProcessingProblem {
         System.out.println("Temps: " + duration1 + " ms");
         System.out.println("Throughput: " + (100_000.0 / duration1 * 1000) + " records/sec");
         
-        // Approche 2: Pool plus grand (500 threads)
+       System.out.println("\n---------------------------------------------------");
+       System.out.println("\n---------------------------------------------------");
         System.out.println("\nApproche 2: Pool de 500 threads");
         start = System.currentTimeMillis();
         
@@ -783,7 +724,7 @@ public class BatchProcessingProblem {
         System.out.println("Temps: " + duration2 + " ms");
         System.out.println("Throughput: " + (100_000.0 / duration2 * 1000) + " records/sec");
         
-        // Analyse
+        
         System.out.println("\n=== Analyse ===");
         System.out.println("50 threads:  " + duration1 + " ms");
         System.out.println("500 threads: " + duration2 + " ms");
@@ -792,11 +733,11 @@ public class BatchProcessingProblem {
             double improvement = ((duration1 - duration2) / (double) duration1) * 100;
             System.out.println("Amélioration: " + String.format("%.1f", improvement) + "%");
         } else {
-            System.out.println("⚠️  Plus de threads = PLUS LENT!");
+            System.out.println("Plus de threads = PLUS LENT!");
             System.out.println("Raison: Context switching overhead > gain parallélisme");
         }
         
-        System.out.println("\n⚠️  Problème:");
+        System.out.println("\n Problème:");
         System.out.println("• 500 threads = 1 GB de mémoire (stack)");
         System.out.println("• Context switching intensif");
         System.out.println("• Pas scalable à 1 million de records");
@@ -831,7 +772,7 @@ Throughput: 4716.9 records/sec
 500 threads: 21200 ms
 Amélioration: 89.4%
 
-⚠️  Problème:
+Problème:
 • 500 threads = 1 GB de mémoire (stack)
 • Context switching intensif
 • Pas scalable à 1 million de records
@@ -843,7 +784,7 @@ Avec 1 million de records:
 */
 ```
 
-### 3.5.3 Microservices avec appels en cascade
+### 3.5.3 Microservices avec appels en cascade (Pour approfondir)
 
 ```java
 import java.net.http.*;
@@ -972,11 +913,11 @@ Si Service C est lent (spike de latence):
 server.tomcat.threads.max=1000  // Au lieu de 200
 
 /* Problèmes:
-❌ Consommation mémoire: 1000 × 2MB = 2GB juste pour les stacks
-❌ Context switching: Performance dégradée
-❌ Toujours une limite: 1000 threads = 1000 connexions max
-❌ Si 2000 requêtes simultanées → toujours un problème!
-❌ Ne scale pas indéfiniment (OutOfMemoryError)
+Consommation mémoire: 1000 × 2MB = 2GB juste pour les stacks
+Context switching: Performance dégradée
+Toujours une limite: 1000 threads = 1000 connexions max
+Si 2000 requêtes simultanées → toujours un problème!
+Ne scale pas indéfiniment (OutOfMemoryError)
 
 Résultat:
 • Coût mémoire élevé
@@ -1006,27 +947,20 @@ public Mono<OrderDetails> getOrderDetails(Long orderId) {
 }
 
 /* Avantages:
-✅ Non-bloquant: excellent throughput
-✅ Peu de threads nécessaires
-✅ Scale très bien
+- Non-bloquant: excellent throughput
+- Peu de threads nécessaires
+- Scale très bien
 
 Inconvénients:
-❌ Courbe d'apprentissage TRÈS raide
-❌ Debugging cauchemardesque:
+- Courbe d'apprentissage TRÈS raide
+- Debugging cauchemardesque:
    Stack traces incompréhensibles avec 50 niveaux
-❌ "Viral": tout le code doit devenir réactif
+- "Viral": tout le code doit devenir réactif
    Si une lib n'est pas réactive → bloque tout
-❌ Code complexe pour des opérations simples
-❌ Nécessite drivers réactifs (R2DBC vs JDBC)
-❌ Beaucoup de libs Java ne supportent pas le réactif
-❌ Gestion d'erreur complexe
-
-Exemple de stack trace réactif (illisible):
-reactor.core.publisher.Mono.lambda$flatMap$1(Mono.java:...)
-reactor.core.publisher.FluxFlatMap$FlatMapMain.onNext(FluxFlatMap.java:...)
-reactor.core.publisher.FluxMapFuseable$MapFuseableSubscriber.onNext(...)
-... 47 lignes plus tard ...
-Caused by: java.sql.SQLException: Connection timeout
+- Code complexe pour des opérations simples
+- Nécessite drivers réactifs (R2DBC vs JDBC)
+- Beaucoup de libs Java ne supportent pas le réactif
+- Gestion d'erreur complexe
 */
 ```
 
@@ -1045,17 +979,17 @@ public CompletableFuture<OrderDetails> getOrderDetails(Long orderId) {
 }
 
 /* Avantages:
-✅ Non-bloquant
-✅ API standard Java
-✅ Meilleur que les threads bloquants
+- Non-bloquant
+- API standard Java
+- Meilleur que les threads bloquants
 
 Inconvénients:
-❌ Code verbeux et complexe
-❌ Gestion erreur difficile (exceptionally, handle)
-❌ Composition compliquée (thenCompose, thenCombine, etc.)
-❌ Debug difficile
-❌ Toujours limité par le thread pool sous-jacent
-❌ "Viral": propage la complexité
+- Code verbeux et complexe
+- Gestion erreur difficile (exceptionally, handle)
+- Composition compliquée (thenCompose, thenCombine, etc.)
+- Debug difficile
+- Toujours limité par le thread pool sous-jacent
+- "Viral": propage la complexité
 
 Exemple de code pour 3 appels parallèles + 1 séquentiel:
 CompletableFuture.supplyAsync(() -> getUser())
@@ -1068,7 +1002,7 @@ CompletableFuture.supplyAsync(() -> getUser())
     ).exceptionally(ex -> handleError(ex))
      .thenAccept(result -> sendResponse(result));
 
-Compare avec du code synchrone simple:
+Code synchrone équivalent :
 User user = getUser();
 Orders orders = getOrders(user);
 Payments payments = getPayments(user);
@@ -1076,7 +1010,7 @@ Preferences prefs = getPreferences(user);
 Result result = combine(user, orders, payments, prefs);
 sendResponse(result);
 
-10× plus simple à lire et maintenir!
+
 */
 ```
 
@@ -1102,18 +1036,18 @@ Coût: 50 instances EC2 m5.xlarge
 Prix: ~$3,500/mois sur AWS
 
 /* Problèmes:
-❌ Coût élevé: $42,000/an
-❌ Complexité: Load balancing, orchestration, monitoring
-❌ Latence: Session affinity, cross-instance calls
-❌ Waste: Chaque instance sous-utilisée (CPU à 10%)
-❌ Management: Déploiements, mises à jour, scaling
+- Coût élevé: $42,000/an
+- Complexité: Load balancing, orchestration, monitoring
+- Latence: Session affinity, cross-instance calls
+- Waste: Chaque instance sous-utilisée (CPU à 10%)
+- Management: Déploiements, mises à jour, scaling
 
 Alternative avec Virtual Threads:
-✅ 5 instances seulement (même capacité)
-✅ Coût: ~$350/mois ($4,200/an)
-✅ Économie: $37,800/an (90% de réduction!)
-✅ Complexité réduite
-✅ Meilleure utilisation CPU (70-80%)
+- 5 instances seulement (même capacité)
+- Coût: ~$350/mois ($4,200/an)
+- Économie: $37,800/an (90% de réduction!)
+- Complexité réduite
+- Meilleure utilisation CPU (70-80%)
 */
 ```
 
@@ -1152,44 +1086,48 @@ Alternative avec Virtual Threads:
 │                     │ • Gaspillage ressources                   │
 └─────────────────────┴───────────────────────────────────────────┘
 ```
-
 ### Comparaison des "solutions"
-
 ```
-┌──────────────────┬──────────┬──────────┬──────────┬───────────┐
-│ Solution         │Complexité│Performance│Scalabilité│Coût Maint.│
-├──────────────────┼──────────┼──────────┼──────────┼───────────┤
-│ Plus de threads  │    ⭐    │    ⭐⭐   │    ⭐    │    ⭐⭐    │
-│ (1000+ threads)  │          │          │          │           │
-├──────────────────┼──────────┼──────────┼──────────┼───────────┤
-│ Thread Pools     │   ⭐⭐   │   ⭐⭐⭐  │   ⭐⭐   │   ⭐⭐⭐   │
-│ (fixed size)     │          │          │          │           │
-├──────────────────┼──────────┼──────────┼──────────┼───────────┤
-│ CompletableFuture│  ⭐⭐⭐   │  ⭐⭐⭐⭐  │  ⭐⭐⭐   │   ⭐⭐    │
-│ (async)          │          │          │          │           │
-├──────────────────┼──────────┼──────────┼──────────┼───────────┤
-│ Reactive (WebFlux│ ⭐⭐⭐⭐⭐  │ ⭐⭐⭐⭐⭐  │ ⭐⭐⭐⭐⭐  │    ⭐     │
-│ /Reactor)        │          │          │          │           │
-├──────────────────┼──────────┼──────────┼──────────┼───────────┤
-│ Horizontal       │  ⭐⭐⭐⭐  │  ⭐⭐⭐⭐  │ ⭐⭐⭐⭐⭐  │   ⭐⭐    │
-│ Scaling          │          │          │          │           │
-├──────────────────┼──────────┼──────────┼──────────┼───────────┤
-│ Virtual Threads  │    ⭐    │ ⭐⭐⭐⭐⭐  │ ⭐⭐⭐⭐⭐  │  ⭐⭐⭐⭐⭐  │
-│ (Java 21)        │          │          │          │           │
-└──────────────────┴──────────┴──────────┴──────────┴───────────┘
+┌─────────────────────┬─────────────┬─────────────┬──────────────┬─────────────┐
+│ Solution            │ Complexité  │ Performance │ Scalabilité  │ Maintenance │
+├─────────────────────┼─────────────┼─────────────┼──────────────┼─────────────┤
+│ Plus de threads     │ BON         │ PASSABLE    │ MAUVAIS      │ PASSABLE    │
+│ (1000+ threads)     │ Simple      │ Limité      │ OOM rapide   │ Config      │
+│                     │             │ context     │              │ difficile   │
+│                     │             │ switching   │              │             │
+├─────────────────────┼─────────────┼─────────────┼──────────────┼─────────────┤
+│ Thread Pools        │ BON         │ BON         │ PASSABLE     │ BON         │
+│ (fixed size)        │ Standard    │ Réutilise   │ Toujours     │ APIs        │
+│                     │ Java        │ threads     │ limité       │ simples     │
+├─────────────────────┼─────────────┼─────────────┼──────────────┼─────────────┤
+│ CompletableFuture   │ PASSABLE    │ BON         │ BON          │ PASSABLE    │
+│ (async)             │ Verbeux     │ Non-        │ Pool sous-   │ Callbacks   │
+│                     │ Callbacks   │ bloquant    │ jacent       │ complexes   │
+├─────────────────────┼─────────────┼─────────────┼──────────────┼─────────────┤
+│ Reactive (WebFlux)  │ MAUVAIS     │ EXCELLENT   │ EXCELLENT    │ MAUVAIS     │
+│ Reactor/RxJava      │ Très raide  │ Throughput  │ Très peu     │ Debug       │
+│                     │ Viral       │ maximal     │ de threads   │ difficile   │
+├─────────────────────┼─────────────┼─────────────┼──────────────┼─────────────┤
+│ Horizontal          │ PASSABLE    │ BON         │ EXCELLENT    │ PASSABLE    │
+│ Scaling             │ Orchestr.   │ Linéaire    │ Ajouter      │ Déploiements│
+│                     │ nécessaire  │             │ instances    │ multiples   │
+├─────────────────────┼─────────────┼─────────────┼──────────────┼─────────────┤
+│ Virtual Threads     │ EXCELLENT   │ EXCELLENT   │ EXCELLENT    │ EXCELLENT   │
+│ (Java 21)           │ Code sync   │ Non-        │ Millions     │ Code simple │
+│                     │ simple      │ bloquant    │ de threads   │ Debug std   │
+└─────────────────────┴─────────────┴─────────────┴──────────────┴─────────────┘
 
-⭐ = Faible/Mauvais
-⭐⭐⭐⭐⭐ = Excellent
-
-Virtual Threads = Le meilleur des deux mondes:
-• Simplicité du code synchrone
-• Performance du code asynchrone
-• Sans les inconvénients!
+Légende:
+• MAUVAIS : Inadapté ou problématique
+• PASSABLE : Fonctionne mais avec compromis
+• BON : Satisfaisant pour la plupart des cas
+• EXCELLENT : Optimal, sans compromis significatif
 ```
 
 ---
 
-## 3.8 Métriques réelles : Avant Virtual Threads
+
+## 3.8 Métriques réelles : Avant LTS21/25 et VT
 
 ### Application E-commerce typique
 
@@ -1201,7 +1139,7 @@ Profil d'une application e-commerce classique:
 ├────────────────────────────────────────────────┤
 │                                                │
 │ Infrastructure:                                │
-│ • 20 instances EC2 m5.xlarge (4 vCPU, 16GB)   │
+│ • 20 instances EC2 m5.xlarge (4 vCPU, 16GB)    │
 │ • Thread pool: 200 threads par instance        │
 │ • Total: 4,000 threads "effectifs"             │
 │                                                │
@@ -1260,36 +1198,15 @@ Avec Virtual Threads:
 
 ## 3.9 Résumé : Le mur des Platform Threads
 
-```
-┌─────────────────────────────────────────────────┐
-│    Le triangle impossible des Platform Threads  │
-│                                                 │
-│                  Scalabilité                    │
-│                      △                          │
-│                     ╱ ╲                         │
-│                    ╱   ╲                        │
-│                   ╱     ╲                       │
-│                  ╱       ╲                      │
-│                 ╱    ❌    ╲                     │
-│                ╱  Impossible ╲                  │
-│               ╱   d'avoir les ╲                 │
-│              ╱       trois     ╲                │
-│             ╱                   ╲               │
-│            △─────────────────────△              │
-│      Simplicité              Performance        │
-│                                                 │
-│  Avec Platform Threads, choisissez 2 sur 3:    │
-│  • Simple + Performant = Pas scalable           │
-│  • Scalable + Performant = Complexe (reactive)  │
-│  • Simple + Scalable = Pas performant           │
-│                                                 │
-└─────────────────────────────────────────────────┘
-```
-
 ### Les chiffres qui font mal
 
 ```
 Limites dures des Platform Threads:
+
+Avec Platform Threads, choisissez 2 sur 3:        │
+│  • Simple + Performant = Pas scalable           │
+│  • Scalable + Performant = Complexe (reactive)  │
+│  • Simple + Scalable = Pas performant 
 
 ┌──────────────────────────┬──────────────────┐
 │ Métrique                 │ Limite Platform  │
@@ -1304,11 +1221,11 @@ Limites dures des Platform Threads:
 └──────────────────────────┴──────────────────┘
 
 Ce que ça signifie en production:
-❌ Impossible de gérer 100,000 connexions WebSocket
-❌ Batch de 1M records → 30+ minutes ou OOM
-❌ Microservices → cascade de blocages
-❌ CPU idle à 90% mais "pas de capacité"
-❌ Coûts cloud × 10 pour compenser
+- Impossible de gérer 100,000 connexions WebSocket
+- Batch de 1M records → 30+ minutes ou OOM
+- Microservices → cascade de blocages
+- CPU idle à 90% mais "pas de capacité"
+- Coûts cloud × 10 pour compenser
 
 La conclusion est claire:
 Le modèle Platform Thread ne peut PAS scale
@@ -1348,7 +1265,8 @@ pour les applications modernes.
    • Mais une limite architecturale
    • Nécessite une nouvelle approche
 
-🎯 Virtual Threads changent la donne:
+Enfin nous y arrivons : Virtual Threads
+
    • Millions de threads possibles
    • Code simple (synchrone)
    • Performance excellente
