@@ -10,10 +10,10 @@
 **Maxence WATRIN**
 
 ### 📅 Date
-**[Date de la présentation]**
+**05/11/2025**
 
-### 🏢 Entreprise
-**Apollo**
+### 🏢 Entreprise/Ecole
+**Apollo-SSC**
 
 ---
 
@@ -34,5 +34,5 @@ Cette présentation explore les **Virtual Threads** introduits dans Java 21, une
 ---
 
 <div style="text-align: center; margin-top: 50px; color: #666;">
-  <small>Préparé avec ❤️ pour la communauté Java</small>
+  <small>Préparé avec ❤️ pour la communauté ApolloJ.</small>
 </div>
