@@ -1,0 +1,23 @@
+---
+---
+
+@import "{{ site.theme }}";
+
+/* Masquer les éléments GitHub indésirables */
+.btn {
+  display: none !important;
+}
+
+.site-footer-owner,
+.site-footer-credits {
+  display: none !important;
+}
+
+/* Ajouter un footer personnalisé */
+.site-footer::after {
+  content: "Présentation Virtual Threads • 2025 • Préparé avec ❤️ pour la communauté ApolloJ.";
+  display: block;
+  text-align: center;
+  padding: 1rem;
+  color: #666;
+}
