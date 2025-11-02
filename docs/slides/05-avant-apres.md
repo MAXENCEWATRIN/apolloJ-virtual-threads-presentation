@@ -671,7 +671,7 @@ Checklist migration:
 ✅ Mise à jour Java 21+
    └─ Changement version dans pom.xml/build.gradle
 
-✅ Mise à jour Spring Boot 3.2+
+✅ Mise à jour Spring Boot 3.5+ (Et bientôt 4.X)
    └─ Changement version parent
 
 ✅ Configuration Virtual Threads
@@ -685,7 +685,7 @@ Checklist migration:
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 Effort: 1-2 jours pour une application typique
-ROI: Immédiat (gains de performance mesurables)
+ROI: Immédiat (gains de performance mesurables directement à partir du moment ou l'app en question est assez sollicité pour en avoir besoin, mais le coup d'implem est tellement bas que ça reste très rentable)
 ```
 
 ---

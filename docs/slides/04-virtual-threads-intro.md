@@ -4,34 +4,36 @@
 
 # 4. La Solution : Virtual Threads (Project Loom)
 
+**Project Loom** est une initiative majeure d'OpenJDK lancée en **2017** par **Ron Pressler** (Oracle) pour repenser la concurrence en Java. Le nom "Loom" (métier à tisser) symbolise l'entrelacement de nombreux fils d'exécution légers enchevêtrer sans jamais s'emmêler.
+
 ## 4.1 Qu'est-ce qu'un Virtual Thread ?
 
 ### Définition
 
-Un **Virtual Thread** est un thread Java léger géré entièrement par la **JVM** (et non par l'OS), qui est automatiquement monté sur un **Platform Thread** (carrier) pour s'exécuter.
+Un **Virtual Thread** est un thread Java léger géré entièrement par la **JVM** (et non par l'OS), qui est automatiquement monté sur un **Platform Thread** pour s'exécuter, et qui ne nécessite d'équivalence physique que sur des opérations très précises, permettant à la JVM de démultiplier ses capacités de traitement sans frêner son hôte physique.
 
 ```
 Analogie du taxi:
 
 Platform Threads = Taxis (ressource limitée, coûteuse)
-Virtual Threads = Passagers (peut être des milliers)
+Virtual Threads = Passagers en sortie d'aéroport (peut être des milliers)
 Carrier Threads = Taxis disponibles à la station
 
 ┌────────────────────────────────────────────────┐
 │  1 Million de Virtual Threads (passagers)      │
 │                                                │
-│  VT-1  VT-2  VT-3 ... VT-999999  VT-1000000   │
+│  VT-1  VT-2  VT-3 ... VT-999999  VT-1000000    │
 │    ↓    ↓     ↓                                │
-│    └────┴─────┴─→ Attendent un carrier        │
+│    └────┴─────┴─→ Attendent un carrier         │
 └────────────────────────────────────────────────┘
                     ↓
 ┌────────────────────────────────────────────────┐
 │  Pool de Carrier Threads (taxis)               │
 │  = Platform Threads                            │
 │                                                │
-│  [Carrier-1] [Carrier-2] ... [Carrier-N]      │
+│  [Carrier-1] [Carrier-2] ... [Carrier-N]       │
 │      ↑           ↑              ↑              │
-│   VT-1 monté  VT-5 monté   VT-42 monté        │
+│   VT-1 monté  VT-5 monté   VT-42 monté         │
 │   (en cours)  (en cours)   (en cours)          │
 └────────────────────────────────────────────────┘
                     ↓
@@ -58,7 +60,7 @@ Nombre de Carriers (N) ≈ Nombre de CPU cores
 ├────────────────────┼─────────────────────────────────┤
 │ Géré par l'OS      │ Géré par la JVM                 │
 │ 2 MB de stack      │ ~1 KB (grandit si besoin)       │
-│ Coût création: ~1ms│ Coût création: ~1µs (1000× ↓)  │
+│ Coût création: ~1ms│ Coût création: ~1µs (1000× ↓)   │
 │ Max: ~5,000        │ Max: Des millions               │
 │ 1:1 avec OS thread │ N:M (plusieurs VT → 1 carrier)  │
 │ Blocking = coûteux │ Blocking = gratuit (unmount)    │
@@ -77,14 +79,14 @@ Cycle de vie d'un Virtual Thread:
 
 1. CRÉATION
 ┌──────────────────────────────────┐
-│ Thread.startVirtualThread(() -> │
-│     doWork();                    │
+│ Thread.startVirtualThread(() ->  │
+│     doWork();     //VT123        │
 │ })                               │
 └──────────────────────────────────┘
          │
          ▼
     [VT créé en mémoire JVM]
-    ~1 KB, en quelques microsecondes
+    ~1 KB (augmentera au besoin), en quelques microsecondes
 
 
 2. ATTENTE D'UN CARRIER
@@ -94,7 +96,7 @@ Cycle de vie d'un Virtual Thread:
 └──────────────────────────────────┘
          │
          ▼
-    [VT attend carrier disponible]
+    [VT attend carrier disponible] => Un carrier représente un coeur CPU, c'est eux qui font le pont avec le hardware maintenant.
 
 
 3. MOUNTING (montage)
@@ -116,9 +118,9 @@ Cycle de vie d'un Virtual Thread:
 
 4. BLOCKING I/O DÉTECTÉ
 ┌──────────────────────────────────┐
-│ VT fait: Thread.sleep()          │
+│ VT123 doit faire: Thread.sleep() │
 │ ou socket.read()                 │
-│ ou JDBC query                    │
+│ ou JDBC query  exemple           │
 └──────────────────────────────────┘
          │
          ▼
@@ -128,8 +130,8 @@ Cycle de vie d'un Virtual Thread:
 5. UNMOUNTING (démontage)
 ┌──────────────────────────────────┐
 │ JVM détecte le blocage           │
-│ → Sauvegarde stack du VT         │
-│ → VT mis en "parking"            │
+│ → Sauvegarde stack du VT123      │
+│ → VT123 mis en "parking"         │
 │ → Carrier libéré                 │
 └──────────────────────────────────┘
          │
@@ -147,18 +149,18 @@ Cycle de vie d'un Virtual Thread:
 6. I/O TERMINÉE
 ┌──────────────────────────────────┐
 │ Socket read() retourne           │
-│ ou sleep() terminé               │
+│ ou sleep() terminé etc              │
 └──────────────────────────────────┘
          │
          ▼
     [VT prêt à reprendre]
-    → Retour à l'étape 2
+    → Retour à la disponibilité d'un carrier pour poursuivre le processus
 
 
 7. REMOUNTING
 ┌──────────────────────────────────┐
 │ VT obtient un carrier            │
-│ (peut être différent!)           │
+│ (pas forcément le même)           │
 │ Stack restauré                   │
 │ Exécution reprend                │
 └──────────────────────────────────┘
@@ -172,10 +174,10 @@ Cycle de vie d'un Virtual Thread:
 └──────────────────────────────────┘
 
 
-8. TERMINAISON
+8. FIN
 ┌──────────────────────────────────┐
 │ run() se termine                 │
-│ VT libéré de la mémoire          │
+│ VT123 libéré de la mémoire       │
 │ Carrier redevient disponible     │
 └──────────────────────────────────┘
 ```
@@ -248,41 +250,6 @@ Observations:
 */
 ```
 
-### Timeline détaillée
-
-```
-Timeline de VT-21 sur 200ms:
-
-Carrier-1: [████████░░░░░░░░░░░░░░░░░░░░░░░░░░░░████████]
-            ▲       ▲                              ▲
-            │       │                              │
-           VT-21   VT-21                         Autre VT
-           monte   démonte                       monte
-                   (sleep)
-
-VT-21:     [████████]─────[parking 100ms]─────[████████]
-            0-10ms        10-110ms             110-120ms
-            Calcul        DÉMONTÉ              Calcul
-            sur C-1       (attend)             sur C-3
-
-Carrier-3: [░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░████████]
-                                                ▲
-                                                │
-                                              VT-21
-                                              remonte
-
-Légende:
-█ = Carrier actif avec VT monté
-░ = Carrier libre ou avec autre VT
-─ = VT en parking (démonté)
-
-Pendant les 100ms de sleep():
-• VT-21 ne consomme AUCUN carrier
-• Carrier-1 peut exécuter d'autres VT
-• VT-21 occupe ~1KB en mémoire (juste sa stack)
-• Pas de thread OS bloqué!
-```
-
 ---
 
 ## 4.3 Architecture interne
@@ -296,33 +263,33 @@ Pendant les 100ms de sleep():
 ├─────────────────────────────────────────────────────┤
 │                                                     │
 │  Submission Queue (tous les VT prêts)               │
-│  ┌───────────────────────────────────────────┐     │
-│  │ [VT-1] [VT-2] [VT-3] ... [VT-999999]     │     │
-│  └───────────────────────────────────────────┘     │
+│  ┌───────────────────────────────────────────┐      │
+│  │ [VT-1] [VT-2] [VT-3] ... [VT-999999]      │      │
+│  └───────────────────────────────────────────┘      │
 │              ↓         ↓         ↓                  │
 │                                                     │
 │  Worker Threads (Carriers)                          │
-│  ┌────────────┐  ┌────────────┐  ┌────────────┐  │
-│  │ Worker-1   │  │ Worker-2   │  │ Worker-N   │  │
-│  │            │  │            │  │            │  │
-│  │ VT-1 monté │  │ VT-5 monté │  │VT-42 monté │  │
-│  │ exécution  │  │ exécution  │  │ exécution  │  │
-│  └────────────┘  └────────────┘  └────────────┘  │
+│  ┌────────────┐  ┌────────────┐  ┌────────────┐     │
+│  │ Worker-1   │  │ Worker-2   │  │ Worker-N   │     │
+│  │            │  │            │  │            │     │
+│  │ VT-1 monté │  │ VT-5 monté │  │VT-42 monté │     │
+│  │ exécution  │  │ exécution  │  │ exécution  │     │
+│  └────────────┘  └────────────┘  └────────────┘     │
 │                                                     │
-│  Parked Virtual Threads (démontés, en attente I/O) │
-│  ┌───────────────────────────────────────────┐     │
-│  │ [VT-4] [VT-7] [VT-12] ... [VT-88888]     │     │
-│  │ (sleep, socket.read, JDBC, etc.)          │     │
-│  └───────────────────────────────────────────┘     │
+│     VT en attentre (démontés, en attente I/O)       │
+│  ┌───────────────────────────────────────────┐      │
+│  │ [VT-4] [VT-7] [VT-12] ... [VT-88888]      │      │
+│  │ (sleep, socket.read, JDBC, etc.)          │      │
+│  └───────────────────────────────────────────┘      │
 │              ↑                                      │
-│              └─ Réveillés quand I/O terminée       │
+│              └─ Réveillés quand I/O terminée        │
 │                 → retournent dans Submission Queue  │
 │                                                     │
 └─────────────────────────────────────────────────────┘
                         ↓
 ┌─────────────────────────────────────────────────────┐
 │            Platform Threads (OS)                    │
-│  [pthread-1]  [pthread-2]  ...  [pthread-N]        │
+│  [pthread-1]  [pthread-2]  ...  [pthread-N]         │
 └─────────────────────────────────────────────────────┘
 ```
 
@@ -761,7 +728,6 @@ public class BlockingIsFreeDemo {
         System.out.println("Carriers attendus: ~" + 
             Runtime.getRuntime().availableProcessors());
         
-        // Lancer 10,000 Virtual Threads qui bloquent
         System.out.println("\nLancement de 10,000 VT qui dorment 5 secondes...\n");
         
         List<Thread> threads = new ArrayList<>();
@@ -770,7 +736,7 @@ public class BlockingIsFreeDemo {
         for (int i = 0; i < 10_000; i++) {
             Thread vt = Thread.startVirtualThread(() -> {
                 try {
-                    // ⚡ Ce VT va se DÉMONTER pendant le sleep
+                    // Démontage du VT car bloquage
                     Thread.sleep(5000);
                     
                     // Après réveil: remonté sur un carrier
@@ -799,8 +765,8 @@ public class BlockingIsFreeDemo {
         System.out.println("10,000 VT dormant 5 secondes chacun");
         System.out.println("Temps théorique (séquentiel): 50,000 secondes");
         System.out.println("Temps réel: ~5 secondes");
-        System.out.println("\n⚡ Les 10,000 VT ont dormi EN PARALLÈLE!");
-        System.out.println("⚡ Utilisant seulement ~" + 
+        System.out.println("\n  Les 10,000 VT ont dormi EN PARALLÈLE!");
+        System.out.println(" Utilisant seulement ~" + 
             Runtime.getRuntime().availableProcessors() + " carriers!");
         
         System.out.println("\nAvec Platform Threads:");
@@ -833,8 +799,8 @@ Temps total: 5156 ms
 Temps théorique (séquentiel): 50,000 secondes
 Temps réel: ~5 secondes
 
-⚡ Les 10,000 VT ont dormi EN PARALLÈLE!
-⚡ Utilisant seulement ~8 carriers!
+ Les 10,000 VT ont dormi EN PARALLÈLE!
+ Utilisant seulement ~8 carriers!
 
 Avec Platform Threads:
 • 10,000 threads = 20 GB de mémoire → IMPOSSIBLE
@@ -988,172 +954,94 @@ Analyse:
 
 ### Ce qui NE change PAS
 
-```java
-public class WhatDoesntChange {
-    
-    public static void main(String[] args) throws InterruptedException {
-        
-        System.out.println("=== Ce qui reste identique ===\n");
-        
-        Thread.startVirtualThread(() -> {
-            
-            // 1. Thread.currentThread() fonctionne
-            System.out.println("1. currentThread(): " + 
-                Thread.currentThread().getName());
-            
-            // 2. Thread.sleep() fonctionne
-            try {
-                Thread.sleep(10);
-                System.out.println("2. sleep() OK");
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-            }
-            
-            // 3. ThreadLocal fonctionne
-            ThreadLocal<String> threadLocal = ThreadLocal.withInitial(() -> "value");
-            System.out.println("3. ThreadLocal: " + threadLocal.get());
-            
-            // 4. Exception handling normal
-            try {
-                throw new RuntimeException("Test");
-            } catch (RuntimeException e) {
-                System.out.println("4. Exceptions: OK");
-            }
-            
-            // 5. synchronized fonctionne (mais attention!)
-            Object lock = new Object();
-            synchronized (lock) {
-                System.out.println("5. synchronized: OK");
-            }
-            
-            // 6. wait/notify fonctionnent
-            synchronized (lock) {
-                try {
-                    lock.wait(10);
-                    System.out.println("6. wait/notify: OK");
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                }
-            }
-            
-            // 7. InterruptedException normale
-            System.out.println("7. Interruption: OK");
-            
-            // 8. Stack traces normales
-            StackTraceElement[] stack = Thread.currentThread().getStackTrace();
-            System.out.println("8. Stack trace: " + stack.length + " frames");
-            
-        }).join();
-        
-        System.out.println("\n✅ Tout le code existant fonctionne tel quel!");
-        System.out.println("✅ Compatibilité 100% avec APIs Java existantes");
-    }
-}
+**Compatibilité totale avec l'écosystème Java existant :**
 
-/* Output:
+```
+✅ APIs et mécanismes qui fonctionnent identiquement:
 
-=== Ce qui reste identique ===
+📍 Thread Management
+   • Thread.currentThread()
+   • Thread.sleep()
+   • Thread.interrupt() / isInterrupted()
+   • Thread.join()
 
-1. currentThread(): VirtualThread[#21]
-2. sleep() OK
-3. ThreadLocal: value
-4. Exceptions: OK
-5. synchronized: OK
-6. wait/notify: OK
-7. Interruption: OK
-8. Stack trace: 9 frames
+🔒 Synchronisation
+   • synchronized blocks et methods
+   • wait() / notify() / notifyAll()
+   • ReentrantLock, Semaphore, CountDownLatch
+   • Toutes les classes java.util.concurrent
 
-✅ Tout le code existant fonctionne tel quel!
-✅ Compatibilité 100% avec APIs Java existantes
-*/
+💾 Données thread-local
+   • ThreadLocal (fonctionne parfaitement)
+   • InheritableThreadLocal
+
+⚠️ Gestion des exceptions
+   • try/catch/finally
+   • InterruptedException
+   • UncaughtExceptionHandler
+
+📊 Debugging et observabilité
+   • Stack traces normales
+   • Thread.getStackTrace()
+   • Breakpoints dans les IDE
+   • Java Flight Recorder
+
+🔌 Toutes les APIs bloquantes Java
+   • JDBC (java.sql.*)
+   • Files I/O (java.io.*, java.nio.*)
+   • Sockets (java.net.*)
+   • HttpClient synchrone
+   • Toutes les bibliothèques existantes
+
+**Conclusion :** Votre code existant fonctionne **sans modification** sur Virtual Threads. C'est une amélioration d'implémentation, pas un changement d'API (Il est interessant d'insister sur ce point si jamais vous avez des collègues récalcitrants).
+
+
 ```
 
-### Ce qui CHANGE (différences importantes)
+### Ce qui CHANGE (Non exhaustifs)
 
-```java
-public class WhatChanges {
-    
-    public static void main(String[] args) throws InterruptedException {
-        
-        System.out.println("=== Ce qui change avec Virtual Threads ===\n");
-        
-        Thread vt = Thread.startVirtualThread(() -> {
-            System.out.println("Virtual Thread en cours...");
-        });
-        vt.join();
-        
-        // 1. Toujours daemon
-        System.out.println("1. isDaemon(): " + vt.isDaemon());
-        System.out.println("   → Les VT sont TOUJOURS daemon");
-        System.out.println("   → JVM peut terminer même si VT en cours");
-        
-        // 2. Pas de ThreadGroup
-        System.out.println("\n2. ThreadGroup: " + vt.getThreadGroup());
-        System.out.println("   → null (ThreadGroup obsolète)");
-        
-        // 3. Priority ignorée
-        Thread vt2 = Thread.ofVirtual()
-            .name("test")
-            .priority(Thread.MAX_PRIORITY)
-            .unstarted(() -> {});
-        System.out.println("\n3. Priority: " + vt2.getPriority());
-        System.out.println("   → Toujours 5 (normal)");
-        System.out.println("   → setPriority() ignoré silencieusement");
-        
-        // 4. Pas de stop(), suspend(), resume()
-        System.out.println("\n4. Méthodes obsolètes:");
-        System.out.println("   → stop(), suspend(), resume() levèent");
-        System.out.println("     UnsupportedOperationException");
-        
-        // 5. Stack size non configurable
-        System.out.println("\n5. Stack:");
-        System.out.println("   → Grandit dynamiquement (pas de -Xss)");
-        System.out.println("   → Commence petit (~1KB)");
-        
-        // 6. Création ultra-rapide
-        System.out.println("\n6. Création:");
-        System.out.println("   → 1000× plus rapide que Platform Thread");
-        System.out.println("   → OK pour short-lived tasks");
-        
-        // 7. Blocking is free
-        System.out.println("\n7. Blocking I/O:");
-        System.out.println("   → Ne consomme pas de carrier pendant blocage");
-        System.out.println("   → Peut avoir des millions de VT bloqués");
-    }
-}
+**Spécificités des Virtual Threads à connaître :**
 
-/* Output:
-
-=== Ce qui change avec Virtual Threads ===
-
-1. isDaemon(): true
-   → Les VT sont TOUJOURS daemon
-   → JVM peut terminer même si VT en cours
-
-2. ThreadGroup: null
-   → null (ThreadGroup obsolète)
-
-3. Priority: 5
-   → Toujours 5 (normal)
-   → setPriority() ignoré silencieusement
-
-4. Méthodes obsolètes:
-   → stop(), suspend(), resume() levèent
-     UnsupportedOperationException
-
-5. Stack:
-   → Grandit dynamiquement (pas de -Xss)
-   → Commence petit (~1KB)
-
-6. Création:
-   → 1000× plus rapide que Platform Thread
-   → OK pour short-lived tasks
-
-7. Blocking I/O:
-   → Ne consomme pas de carrier pendant blocage
-   → Peut avoir des millions de VT bloqués
-*/
 ```
+⚠️ Différences avec les Platform Threads:
+
+🔧 Comportement
+   • isDaemon() → Toujours TRUE
+     Les VT sont toujours des threads daemon
+     La JVM peut terminer même si des VT sont en cours
+   
+   • getThreadGroup() → Toujours NULL
+     Concept de ThreadGroup obsolète pour VT
+   
+   • getPriority() / setPriority() → Ignoré
+     Priorité toujours fixée à NORM_PRIORITY (5)
+     setPriority() n'a aucun effet
+
+💾 Stack dynamique
+   • Pas de taille fixe (-Xss ignoré)
+   • Commence petit (~1 KB)
+   • Grandit automatiquement selon les besoins
+   • Peut rétrécir après libération
+
+⚡ Performance
+   • Création: ~1 µs (1000× plus rapide)
+   • Mémoire: ~1 KB (2000× moins)
+   • Pas de limite pratique au nombre
+
+🔐 Pinning (attention!)
+   • synchronized + I/O → Thread épinglé
+   • Appels JNI → Thread épinglé
+   • Solution: Utiliser ReentrantLock
+
+📊 Scheduling
+   • Géré par la JVM (ForkJoinPool)
+   • Pas par l'OS
+   • Démontage/Remontage automatique sur I/O
+```
+
+**Point clé :** Ces différences sont mineures et la plupart n'impactent pas le code applicatif. 
+La principale vigilance concerne le **pinning** avec `synchronized`.
+Justement, parlons du pinning, qu'est-ce que c'est ?
 
 ---
 
@@ -1166,8 +1054,13 @@ Pinned Thread = Virtual Thread qui NE PEUT PAS se démonter
 
 Situations qui "épinglent" un VT au carrier:
 
-1. Bloc synchronized
-2. Méthode native (JNI call)
+1. Bloc synchronized 
+
+**Utilisations courantes de `synchronized` :**
+- Protéger des variables partagées (compteurs, caches, collections)
+- Garantir l'atomicité d'opérations multiples
+- Synchroniser l'accès à des ressources externes (connexions, files)
+
 
 ┌────────────────────────────────────────────────┐
 │ Scénario: VT épinglé (pinned)                  │
@@ -1175,7 +1068,7 @@ Situations qui "épinglent" un VT au carrier:
 │                                                │
 │  Thread.startVirtualThread(() -> {             │
 │      synchronized (lock) {                     │
-│          // ⚠️ VT ÉPINGLÉ au carrier ici!      │
+│          // VT ÉPINGLÉ au carrier ici!         │
 │          socket.read();  // Blocking I/O       │
 │          // Le carrier reste BLOQUÉ            │
 │      }                                         │
@@ -1183,14 +1076,7 @@ Situations qui "épinglent" un VT au carrier:
 │                                                │
 └────────────────────────────────────────────────┘
 
-Timeline:
-Carrier: [████████████████BLOQUÉ████████████████]
-          ▲                                     ▲
-          │                                     │
-       VT monté                            VT toujours
-       + synchronized                      sur le carrier
-       
-Le carrier ne peut PAS prendre un autre VT!
+2. Méthode native (JNI call)
 ```
 
 ### Démonstration du problème
@@ -1228,7 +1114,8 @@ public class PinnedThreadDemo {
                 String.format("%.0f", (pinnedTime / (double) unpinnedTime - 1) * 100) + "%");
         }
     }
-    
+
+    //ICI synchronized utilisé
     private static long testPinned(int numThreads) throws InterruptedException {
         
         long start = System.currentTimeMillis();
@@ -1237,9 +1124,7 @@ public class PinnedThreadDemo {
         for (int i = 0; i < numThreads; i++) {
             Thread vt = Thread.startVirtualThread(() -> {
                 synchronized (syncLock) {
-                    // ⚠️ VT épinglé pendant ce bloc
                     try {
-                        // Simulation I/O bloquant
                         Thread.sleep(10);
                     } catch (InterruptedException e) {
                         Thread.currentThread().interrupt();
@@ -1259,6 +1144,7 @@ public class PinnedThreadDemo {
         return duration;
     }
     
+    //ICI pas de synchronized utilisé
     private static long testUnpinned(int numThreads) throws InterruptedException {
         
         long start = System.currentTimeMillis();
@@ -1268,7 +1154,6 @@ public class PinnedThreadDemo {
             Thread vt = Thread.startVirtualThread(() -> {
                 reentrantLock.lock();
                 try {
-                    // ✅ VT peut se démonter ici
                     Thread.sleep(10);
                 } catch (InterruptedException e) {
                     Thread.currentThread().interrupt();
@@ -1316,116 +1201,49 @@ Explication:
 
 ### Solution : Éviter le pinning
 
-```java
-public class AvoidPinning {
-    
-    public static void main(String[] args) {
-        
-        System.out.println("=== Comment éviter le pinning ===\n");
-        
-        // ❌ MAUVAIS: synchronized avec I/O
-        System.out.println("❌ MAUVAIS:");
-        System.out.println("""
-            synchronized (lock) {
-                socket.read();  // VT épinglé!
-            }
-        """);
-        
-        // ✅ BON: ReentrantLock avec I/O
-        System.out.println("✅ BON:");
-        System.out.println("""
-            lock.lock();
-            try {
-                socket.read();  // VT peut se démonter
-            } finally {
-                lock.unlock();
-            }
-        """);
-        
-        // ✅ BON: synchronized sans I/O
-        System.out.println("✅ ACCEPTABLE:");
-        System.out.println("""
-            synchronized (lock) {
-                counter++;  // Rapide, pas d'I/O
-            }
-            // Si le bloc est très court (< 1ms), le pinning est OK
-        """);
-        
-        // ❌ MAUVAIS: synchronized avec DB call
-        System.out.println("❌ MAUVAIS:");
-        System.out.println("""
-            synchronized (lock) {
-                ResultSet rs = stmt.executeQuery(...);  // VT épinglé!
-            }
-        """);
-        
-        // ✅ BON: Pas de lock pendant I/O
-        System.out.println("✅ BON:");
-        System.out.println("""
-            ResultSet rs = stmt.executeQuery(...);  // Pas de lock
-            synchronized (lock) {
-                // Traiter les résultats
-                processResults(rs);
-            }
-        """);
-        
-        System.out.println("\n📝 Règle générale:");
-        System.out.println("• synchronized OK pour sections critiques COURTES");
-        System.out.println("• ReentrantLock pour sections avec I/O ou longues");
-        System.out.println("• Éviter synchronized autour d'appels bloquants");
-    }
-}
-```
-
-### Détection du pinning
-
-```java
-public class DetectPinning {
-    
-    public static void main(String[] args) throws InterruptedException {
-        
-        System.out.println("=== Détecter le pinning ===\n");
-        
-        // Activer le mode debug pour pinning
-        System.setProperty("jdk.tracePinnedThreads", "full");
-        
-        System.out.println("Lancement VT avec synchronized + blocking...\n");
-        
-        Object lock = new Object();
-        
-        Thread.startVirtualThread(() -> {
-            synchronized (lock) {
-                try {
-                    System.out.println("VT: dans synchronized, appel sleep()");
-                    Thread.sleep(100);  // Blocking I/O
-                    System.out.println("VT: après sleep()");
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                }
-            }
-        }).join();
-        
-        System.out.println("\n✅ Si pinning détecté, stack trace affichée");
-        System.out.println("   dans les logs JVM");
-    }
-}
-
-/* Avec -Djdk.tracePinnedThreads=full, output:
-
-Thread[#23,ForkJoinPool-1-worker-1,5,CarrierThreads]
-    java.base/java.lang.VirtualThread$VThreadContinuation.onPinned
-    java.base/jdk.internal.vm.Continuation.onPinned0
-    java.base/java.lang.VirtualThread.parkNanos
-    java.base/java.lang.System$2.parkVirtualThread
-    java.base/jdk.internal.misc.VirtualThreads.park
-    java.base/java.lang.Thread.sleepNanos
-    java.base/java.lang.Thread.sleep
-    DetectPinning.lambda$main$0(DetectPinning.java:19) <== monitors:1
-    ...
-
-Le "<== monitors:1" indique synchronized actif = pinning!
-*/
-```
+┌─────────────────────────────────────────────────────────┐
+│  Cas d'usage                     │  Recommandation      │
+├──────────────────────────────────┼──────────────────────┤
+│                                                         │
+│    SECTION CRITIQUE COURTE (< 1ms)                      │
+│                                                         │
+│  synchronized (lock) {                                  │
+│      counter++;                   OK                    │
+│      map.put(key, value);         Rapide, pas d'I/O     │
+│  }                                                      │
+│                                                         │
+├─────────────────────────────────────────────────────────┤
+│                                                         │
+│    SECTION CRITIQUE AVEC I/O BLOQUANT                   │
+│                                                         │
+│   MAUVAIS:                                              │
+│  synchronized (lock) {                                  │
+│      socket.read();               Thread épinglé!       │
+│      stmt.executeQuery();         Carrier bloqué        │
+│  }                                                      │
+│                                                         │
+│   BON:                                                  │
+│  lock.lock();                                           │
+│  try {                                                  │
+│      socket.read();               VT peut se démonter   │
+│      stmt.executeQuery();         Carrier reste libre   │
+│  } finally {                                            │
+│      lock.unlock();                                     │
+│  }                                                      │
+│                                                         │
+├─────────────────────────────────────────────────────────┤
+│                                                         │
+│    I/O EN DEHORS DE LA SECTION CRITIQUE                 │ 
+│                                                         │
+│  // Faire l'I/O d'abord                     │
+│  ResultSet rs = stmt.executeQuery(...);   Pas de lock   │
+│                                                         │
+│  // Synchroniser seulement le traitement                │
+│  synchronized (lock) {                                  │
+│      processResults(rs);           Section courte       │
+│  }                                                      │
+│                                                         │
+└─────────────────────────────────────────────────────────┘
 
 ---
 
@@ -1436,57 +1254,57 @@ Le "<== monitors:1" indique synchronized actif = pinning!
 │         Virtual Threads - Points Clés               │
 ├─────────────────────────────────────────────────────┤
 │                                                     │
-│ ✅ AVANTAGES                                        │
+│  AVANTAGES                                          │
 │                                                     │
-│ 1. Légers                                          │
-│    • ~1 KB par thread                              │
-│    • Des millions possibles                        │
+│ 1. Légers                                           │
+│    • ~1 KB par thread                               │
+│    • Des millions possibles                         │
 │                                                     │
-│ 2. Rapides à créer                                 │
-│    • ~1 µs vs ~500 µs (Platform)                   │
-│    • 1000× plus rapide                             │
+│ 2. Rapides à créer                                  │
+│    • ~1 µs vs ~500 µs (Platform)                    │
+│    • 1000× plus rapide                              │
 │                                                     │
-│ 3. Blocking gratuit                                │
-│    • Démontage automatique sur I/O                 │
-│    • Carriers restent libres                       │
-│    • 0% de gaspillage                              │
+│ 3. Blocking gratuit                                 │
+│    • Démontage automatique sur I/O                  │
+│    • Carriers restent libres                        │
+│    • 0% de gaspillage                               │
 │                                                     │
-│ 4. Code simple                                     │
-│    • Style synchrone/impératif                     │
-│    • Pas de callback, Promise, Mono, Flux         │
-│    • Compatible 100% code existant                 │
+│ 4. Code simple                                      │
+│    • Style synchrone/impératif                      │
+│    • Pas de callback, Promise, Mono, Flux           │
+│    • Compatible 100% code existant                  │
 │                                                     │
-│ 5. Scalabilité extrême                            │
-│    • 100,000+ connexions simultanées               │
-│    • WebSocket, long-polling: OK                   │
-│    • Batch processing massif: OK                   │
-│                                                     │
-├─────────────────────────────────────────────────────┤
-│                                                     │
-│ ⚠️  PIÈGES À ÉVITER                                │
-│                                                     │
-│ 1. Pinning avec synchronized                       │
-│    → Utiliser ReentrantLock si I/O dans le bloc    │
-│                                                     │
-│ 2. ThreadLocal avec millions de VT                 │
-│    → Attention à la mémoire si données volumineuses│
-│                                                     │
-│ 3. Toujours daemon                                 │
-│    → JVM peut terminer avec VT en cours            │
+│ 5. Scalabilité extrême                              │
+│    • 100,000+ connexions simultanées                │
+│    • WebSocket, long-polling: OK                    │
+│    • Batch processing massif: OK                    │
 │                                                     │
 ├─────────────────────────────────────────────────────┤
 │                                                     │
-│ 🎯 QUAND UTILISER                                   │
+│   PIÈGES À ÉVITER                                   │
 │                                                     │
-│ ✅ I/O-bound applications                           │
-│ ✅ Microservices avec appels externes               │
-│ ✅ API REST avec DB + cache + services             │
-│ ✅ WebSocket / SSE / Long polling                   │
-│ ✅ Batch processing parallèle                       │
-│ ✅ Tout code qui fait du blocking I/O               │
+│ 1. Pinning avec synchronized                        │
+│    → Utiliser ReentrantLock si I/O dans le bloc     │
 │                                                     │
-│ ⚠️  CPU-bound: pas d'avantage                       │
-│    (mais pas de désavantage non plus)              │
+│ 2. ThreadLocal avec millions de VT                  │
+│    → Attention à la mémoire si données volumineuses │
+│                                                     │
+│ 3. Toujours daemon                                  │
+│    → JVM peut terminer avec VT en cours             │
+│                                                     │
+├─────────────────────────────────────────────────────┤
+│                                                     │
+│  QUAND LES UTILISER CORRECTEMENT                    │
+│                                                     │
+│  I/O-bound applications                             │
+│  Microservices avec appels externes                 │
+│  API REST avec DB + cache + services                │
+│  WebSocket / SSE / Long polling                     │
+│  Batch processing parallèle                         │
+│  Tout code qui fait du blocking I/O                 │
+│                                                     │
+│ CPU-bound: pas d'avantage                           │
+│    (mais pas de désavantage non plus)               │
 │                                                     │
 └─────────────────────────────────────────────────────┘
 ```

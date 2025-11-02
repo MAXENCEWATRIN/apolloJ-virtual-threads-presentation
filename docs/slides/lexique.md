@@ -2,6 +2,8 @@
 
 ---
 
+//TODO : ajouter Deamon thread, ThreadGroup, ReentrantLock, Xss, I/O-bound applications 
+
 # 📖 Lexique des Termes Techniques
 
 ## A
