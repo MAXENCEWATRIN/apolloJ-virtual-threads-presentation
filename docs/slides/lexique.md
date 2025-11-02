@@ -1,8 +1,8 @@
+# lexique.md
+
 [🏠 Accueil](index.md) | [📋 Sommaire](sommaire.md)
 
 ---
-
-//TODO : ajouter Deamon thread, ThreadGroup, ReentrantLock, Xss, I/O-bound applications 
 
 # 📖 Lexique des Termes Techniques
 
@@ -133,7 +133,6 @@
 
 ### Heap
 **Définition :** Zone mémoire où sont alloués les objets Java.  
-**Traduction :** Non  
 **Usage :** "Heap" est standard en français technique Java.
 
 ### HTTP Client
@@ -311,6 +310,13 @@
 **Traduction :** Programmation réactive  
 **Usage :** Les deux termes sont équivalents.
 
+### ReentrantLock
+**Définition :** Verrou explicite Java permettant un contrôle avancé de la synchronisation, avec support du ré-entrant (un thread peut acquérir plusieurs fois le même lock).  
+**Traduction :** Verrou réentrant  
+**Usage :** "ReentrantLock" (classe Java) est utilisé tel quel. Alternative à `synchronized` qui permet l'unmounting des Virtual Threads.
+
+**Avantage avec Virtual Threads :** Contrairement à `synchronized`, un Virtual Thread peut se démonter même en tenant un ReentrantLock lors d'une opération I/O bloquante.
+
 ### REST (Representational State Transfer)
 **Définition :** Style d'architecture pour les services web basé sur HTTP.  
 **Traduction :** Pas de traduction établie  
@@ -383,6 +389,11 @@
 **Définition :** Fil d'exécution, plus petite unité d'exécution gérée par un système.  
 **Traduction :** Fil d'exécution / Processus léger  
 **Usage :** "Thread" est universellement utilisé en français technique.
+
+### ThreadGroup
+**Définition :** ThreadGroup représente une collection de Thread java pouvant être gérer par hierarchie (TreeMap)  
+**Traduction :** Groupe de fil d'éxécution
+**Usage :** Anglicisme.
 
 ### Thread-per-Request
 **Définition :** Modèle où chaque requête est traitée par un thread dédié.  
