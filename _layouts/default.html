@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ page.title | default: site.title }}</title>
+    <link rel="stylesheet" href="{{ '/assets/css/style.css?v=' | append: site.github.build_revision | relative_url }}">
+  </head>
+  <body>
+    
+    <!-- Header simplifié (sans le repository info) -->
+    <header class="page-header" role="banner">
+      <h1 class="project-name">{{ site.title | default: "Les Threads Virtuels en Java" }}</h1>
+      <h2 class="project-tagline">{{ site.description | default: "De la théorie à la pratique" }}</h2>
+    </header>
+
+    <!-- Contenu principal -->
+    <main id="content" class="main-content" role="main">
+      {{ content }}
+      
+      <!-- Footer simplifié (sans "maintained by...") -->
+      <footer class="site-footer">
+        <span class="site-footer-credits">
+          Présentation préparée avec ❤️ pour la communauté Java
+        </span>
+      </footer>
+    </main>
+
+  </body>
+</html>
