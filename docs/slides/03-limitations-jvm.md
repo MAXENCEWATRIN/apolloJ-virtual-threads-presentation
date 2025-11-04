@@ -94,7 +94,7 @@ public class ThreadPerRequestDemo {
             }
         });
         
-        // Endpoint de monitoring
+        // Endpoint de monitoring pour visualiser nos magouilles
         server.createContext("/stats", exchange -> {
             String stats = String.format(
                 "Active: %d, Queue: %d, Pool size: %d",

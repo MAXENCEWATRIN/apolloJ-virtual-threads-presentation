@@ -679,6 +679,7 @@ Inconvénients:
 
 ### ExecutorService et Thread Pools
 
+La réutilisabilité des Threads.
 ```java
 import java.util.concurrent.*;
 
@@ -980,7 +981,6 @@ Comment ça marche:
    • Mais les applications modernes ont besoin
      de gérer 100,000+ connexions simultanées
    
-➡️  Solution: Virtual Threads (chapitre suivant)
 ```
 
 ---
