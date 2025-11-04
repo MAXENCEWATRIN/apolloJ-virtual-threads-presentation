@@ -1,6 +1,6 @@
 title: "Présentation Java Virtual Threads"
 markdown: kramdown
-theme: jekyll-theme-chirpy
+theme: jekyll-theme-minima
 plugins:
   - jekyll-relative-links
 relative_links:
