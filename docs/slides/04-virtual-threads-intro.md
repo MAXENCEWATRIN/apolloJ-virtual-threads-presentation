@@ -182,72 +182,55 @@ Cycle de vie d'un Virtual Thread:
 └──────────────────────────────────┘
 ```
 
-### Exemple concret avec timeline
+### Mounting et unMounting : Action invisible
+
+Le mounting et l'unmounting sont complètement transparents pour le code utilisateur. Voici un exemple illustrant ce comportement:
+
+- rien n'est fait explicitement pour démonter/remonter le VT
+- la JVM s'en charge automatiquement lors d'une opération bloquante (ici, Thread.sleep())
+- Pour le démontrer, il faudrait observer le carrier thread avant et après le sleep(), mais c'est difficile de le faire directement en Java.
 
 ```java
-public class MountingUnmountingDemo {
-    
-    public static void main(String[] args) throws InterruptedException {
-        
-        Thread.startVirtualThread(() -> {
-            System.out.println("[1] VT démarré sur: " + 
-                Thread.currentThread());
-            
-            try {
-                // Phase CPU-bound
-                System.out.println("[2] Calcul en cours...");
-                long sum = 0;
-                for (long i = 0; i < 1_000_000; i++) {
-                    sum += i;
-                }
-                System.out.println("[3] Résultat: " + sum + 
-                    " sur " + Thread.currentThread());
-                
-                // ⚡ UNMOUNTING ici!
-                System.out.println("[4] Début sleep (VT va se démonter)");
-                Thread.sleep(100);
-                
-                // ⚡ REMOUNTING ici!
-                System.out.println("[5] Après sleep (VT remonté) sur: " + 
-                    Thread.currentThread());
-                
-                // Phase CPU-bound
-                System.out.println("[6] Autre calcul...");
-                sum = 0;
-                for (long i = 0; i < 1_000_000; i++) {
-                    sum += i;
-                }
-                System.out.println("[7] Terminé sur: " + 
-                    Thread.currentThread());
-                
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-            }
-        });
-        
-        Thread.sleep(500);
-    }
+public class MountingUnmountingVTDemo {
+
+	public static void main(String[] args) throws InterruptedException {
+
+		Thread.startVirtualThread(() -> {
+			System.out.println("[1] VT démarré sur: " +
+				Thread.currentThread());
+			try {
+				// Ici, le thread est monté sur un carrier OS Thread
+				System.out.println("[2] Calcul en cours...");
+				long sum = 0;
+				for (long i = 0; i < 1_000_000; i++) {
+					sum += i;
+				}
+				System.out.println("[3] Résultat: " + sum +
+					" sur " + Thread.currentThread());
+
+				System.out.println("[4] Début sleep (Le virtual Thread va se démonter du carrier)");
+				Thread.sleep(100);
+
+				System.out.println("[5] Après sleep (virtual Thread remonté) sur: " +
+					Thread.currentThread());
+
+				System.out.println("[6] Autre calcul...");
+				// Ici aussi, le thread est monté sur un carrier OS Thread
+				sum = 0;
+				for (long i = 0; i < 1_000_000; i++) {
+					sum += i;
+				}
+				System.out.println("[7] Terminé sur: " +
+					Thread.currentThread());
+
+			} catch (InterruptedException e) {
+				Thread.currentThread().interrupt();
+			}
+		});
+
+		Thread.sleep(500);
+	}
 }
-
-/* Output typique:
-
-[1] VT démarré sur: VirtualThread[#21]/runnable@ForkJoinPool-1-worker-1
-[2] Calcul en cours...
-[3] Résultat: 499999500000 sur VirtualThread[#21]/runnable@ForkJoinPool-1-worker-1
-[4] Début sleep (VT va se démonter)
-[5] Après sleep (VT remonté) sur: VirtualThread[#21]/runnable@ForkJoinPool-1-worker-3
-                                                                        ↑
-                                                                    Carrier différent!
-[6] Autre calcul...
-[7] Terminé sur: VirtualThread[#21]/runnable@ForkJoinPool-1-worker-3
-
-Observations:
-• VT-21 commence sur worker-1
-• Pendant sleep(): VT se démonte automatiquement
-• Après sleep(): VT remonte sur worker-3 (différent!)
-• Le VT "ne sait pas" qu'il a changé de carrier
-• Tout est transparent pour le code
-*/
 ```
 
 ---
@@ -306,7 +289,7 @@ public class VirtualThreadSchedulerConfig {
         // Par défaut: Runtime.getRuntime().availableProcessors()
         System.setProperty("jdk.virtualThreadScheduler.parallelism", "8");
         
-        // 2. MaxPoolSize : pool max si carriers pinnés
+        // 2. MaxPoolSize : pool max si carriers pinnés => notion qui sera vue plus tard
         // Par défaut: 256
         System.setProperty("jdk.virtualThreadScheduler.maxPoolSize", "256");
         
@@ -324,24 +307,6 @@ public class VirtualThreadSchedulerConfig {
             Runtime.getRuntime().availableProcessors());
     }
 }
-
-/* Configuration recommandée:
-
-En développement (laptop):
-• parallelism: non défini (auto = nb CPUs)
-• maxPoolSize: 256 (défaut OK)
-
-En production (server):
-• parallelism: non défini (auto)
-  → JVM détecte nb CPUs du container
-• maxPoolSize: 256-512
-  → Au cas où certains VT sont pinnés
-
-Machine 8 cores:
-• 8 carrier threads actifs
-• Peut gérer des millions de VT
-• Les VT se partagent les 8 carriers
-*/
 ```
 
 ---
@@ -350,88 +315,65 @@ Machine 8 cores:
 
 ### Poids mémoire
 
+On va mesurer la mémoire utilisée par la création de 100,000 Virtual Threads, dans une logique Platform thread, 
+la théorie voudrait que cela soit impossible (OOM), ou que le coût en mémoire soit énorme (plusieurs centaines de GB, si 2mb par thread).
+
 ```java
+import java.util.ArrayList;
+import java.util.List;
+
 public class VirtualThreadMemoryDemo {
-    
-    public static void main(String[] args) throws InterruptedException {
-        
-        Runtime runtime = Runtime.getRuntime();
-        
-        // Mémoire avant
-        System.gc();
-        Thread.sleep(100);
-        long memBefore = runtime.totalMemory() - runtime.freeMemory();
-        
-        System.out.println("=== Création de 100,000 Virtual Threads ===\n");
-        System.out.println("Mémoire avant: " + memBefore / 1024 / 1024 + " MB");
-        
-        List<Thread> threads = new ArrayList<>();
-        
-        long start = System.currentTimeMillis();
-        
-        // Créer 100,000 Virtual Threads
-        for (int i = 0; i < 100_000; i++) {
-            Thread vt = Thread.startVirtualThread(() -> {
-                try {
-                    Thread.sleep(10_000); // Dormir 10 secondes
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                }
-            });
-            threads.add(vt);
-        }
-        
-        long creationTime = System.currentTimeMillis() - start;
-        
-        Thread.sleep(500); // Laisser les threads se stabiliser
-        
-        // Mémoire après
-        long memAfter = runtime.totalMemory() - runtime.freeMemory();
-        long memUsed = memAfter - memBefore;
-        
-        System.out.println("\n=== Résultats ===");
-        System.out.println("Temps de création: " + creationTime + " ms");
-        System.out.println("Temps par thread: " + 
-            (creationTime * 1000.0 / 100_000) + " µs");
-        System.out.println("\nMémoire après: " + memAfter / 1024 / 1024 + " MB");
-        System.out.println("Mémoire utilisée: " + memUsed / 1024 / 1024 + " MB");
-        System.out.println("Mémoire par VT: " + (memUsed / 100_000) + " bytes ≈ " +
-            (memUsed / 100_000 / 1024.0) + " KB");
-        
-        System.out.println("\n=== Comparaison ===");
-        System.out.println("Platform Threads (100,000): ~200 GB (IMPOSSIBLE!)");
-        System.out.println("Virtual Threads (100,000): ~" + 
-            memUsed / 1024 / 1024 + " MB (POSSIBLE!)");
-        
-        // Nettoyer
-        threads.forEach(Thread::interrupt);
-    }
+
+	public static void main(String[] args) throws InterruptedException {
+
+		Runtime runtime = Runtime.getRuntime();
+		// On nettoie un coup pour s'assurer de ne pas fausser le résultat
+		System.gc();
+		Thread.sleep(100);
+		long memBefore = runtime.totalMemory() - runtime.freeMemory();
+
+		System.out.println("=== Création de 100,000 Virtual Threads ===\n");
+		System.out.println("Mémoire avant: " + memBefore / 1024 / 1024 + " MB");
+
+		List<Thread> threads = new ArrayList<>();
+
+		long start = System.currentTimeMillis();
+
+		for (int i = 0; i < 100_000; i++) {
+			Thread vt = Thread.startVirtualThread(() -> {
+				try {
+					Thread.sleep(10_000);
+				} catch (InterruptedException e) {
+					Thread.currentThread().interrupt();
+				}
+			});
+			threads.add(vt);
+		}
+
+		long creationTime = System.currentTimeMillis() - start;
+
+		Thread.sleep(500);
+
+		// Calcul de la mémoire utilisée
+		long memoryAfter = runtime.totalMemory() - runtime.freeMemory();
+		long memoryUsed = memoryAfter - memBefore;
+
+		System.out.println("\n=== Résultats ===");
+		System.out.println("Temps de création: " + creationTime + " ms");
+		System.out.println("Temps par thread: " +
+			(creationTime * 1000.0 / 100_000) + " µs");
+		System.out.println("\nMémoire après: " + memoryAfter / 1024 / 1024 + " MB");
+		System.out.println("Mémoire utilisée: " + memoryUsed / 1024 / 1024 + " MB");
+		System.out.println("Mémoire par VT: " + (memoryUsed / 100_000) + " bytes ≈ " +
+			(memoryUsed / 100_000 / 1024.0) + " KB");
+
+		System.out.println("\n=== Comparaison ===");
+		System.out.println("Platform Threads (100,000): ~200 GB (Dans un monde ou la famine n'existe plus)");
+		System.out.println("Virtual Threads (100,000): ~" + memoryUsed / 1024 / 1024 + " MB (Là on parle)");
+
+		threads.forEach(Thread::interrupt);
+	}
 }
-
-/* Output typique:
-
-=== Création de 100,000 Virtual Threads ===
-
-Mémoire avant: 45 MB
-
-=== Résultats ===
-Temps de création: 156 ms
-Temps par thread: 1.56 µs
-
-Mémoire après: 195 MB
-Mémoire utilisée: 150 MB
-Mémoire par VT: 1536 bytes ≈ 1.5 KB
-
-=== Comparaison ===
-Platform Threads (100,000): ~200 GB (IMPOSSIBLE!)
-Virtual Threads (100,000): ~150 MB (POSSIBLE!)
-
-Observations:
-• 100,000 VT créés en 156ms (Platform: plusieurs minutes!)
-• ~1.5 KB par VT (Platform: 2 MB)
-• Ratio: 1300× moins de mémoire!
-• Sur une machine 16 GB: peut créer ~10 MILLIONS de VT
-*/
 ```
 
 ### Performance de création
@@ -544,167 +486,109 @@ Note: 100,000 VT créés en 180ms
 ### Création de Virtual Threads
 
 ```java
-public class VirtualThreadCreationAPI {
-    
-    public static void main(String[] args) throws InterruptedException {
-        
-        System.out.println("=== 5 façons de créer des Virtual Threads ===\n");
-        
-        // 1. Thread.startVirtualThread() - Le plus simple
-        System.out.println("1. Thread.startVirtualThread()");
-        Thread vt1 = Thread.startVirtualThread(() -> {
-            System.out.println("  VT créé avec startVirtualThread()");
-        });
-        vt1.join();
-        
-        // 2. Thread.ofVirtual().start() - Plus de contrôle
-        System.out.println("\n2. Thread.ofVirtual().start()");
-        Thread vt2 = Thread.ofVirtual()
-            .name("my-virtual-thread")
-            .start(() -> {
-                System.out.println("  VT nommé: " + 
-                    Thread.currentThread().getName());
-            });
-        vt2.join();
-        
-        // 3. Thread.ofVirtual().unstarted() - Démarrage manuel
-        System.out.println("\n3. Thread.ofVirtual().unstarted()");
-        Thread vt3 = Thread.ofVirtual()
-            .name("unstarted-vt")
-            .unstarted(() -> {
-                System.out.println("  VT démarré manuellement");
-            });
-        System.out.println("  État avant start(): " + vt3.getState());
-        vt3.start();
-        vt3.join();
-        
-        // 4. Executors.newVirtualThreadPerTaskExecutor()
-        System.out.println("\n4. ExecutorService avec VT");
-        try (var executor = Executors.newVirtualThreadPerTaskExecutor()) {
-            executor.submit(() -> {
-                System.out.println("  VT via ExecutorService");
-            }).get();
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-        
-        // 5. ThreadFactory personnalisé
-        System.out.println("\n5. ThreadFactory personnalisé");
-        ThreadFactory factory = Thread.ofVirtual()
-            .name("custom-vt-", 0)
-            .factory();
-        
-        Thread vt5 = factory.newThread(() -> {
-            System.out.println("  VT: " + Thread.currentThread().getName());
-        });
-        vt5.start();
-        vt5.join();
-        
-        System.out.println("\n=== Vérification ===");
-        System.out.println("Tous les threads étaient virtuels: " +
-            Stream.of(vt1, vt2, vt3, vt5)
-                .allMatch(Thread::isVirtual));
-    }
+import java.util.concurrent.Executors;
+import java.util.concurrent.ThreadFactory;
+import java.util.stream.Stream;
+
+public class VirtualThreadCreationApi {
+
+	public static void main(String[] args) throws InterruptedException {
+
+		System.out.println("=== 5 façons de créer des Virtual Threads ===\n");
+
+		// 1. Thread.startVirtualThread() - Le plus coura,nt et simple
+		System.out.println("1. Thread.startVirtualThread()");
+		Thread vt1 = Thread.startVirtualThread(() -> {
+			System.out.println("  VT créé avec startVirtualThread()");
+		});
+		vt1.join();
+
+		// 2. Thread.ofVirtual().start() - Plus de contrôle
+		System.out.println("\n2. Thread.ofVirtual().start()");
+		Thread vt2 = Thread.ofVirtual()
+			.name("my-virtual-thread")
+			.start(() -> {
+				System.out.println("  VT nommé: " +
+					Thread.currentThread().getName());
+			});
+		vt2.join();
+
+		// 3. Thread.ofVirtual().unstarted() - Démarrage manuel, le plus lisible (procédural)
+		System.out.println("\n3. Thread.ofVirtual().unstarted()");
+		Thread vt3 = Thread.ofVirtual()
+			.name("unstarted-vt")
+			.unstarted(() -> {
+				System.out.println("  VT démarré manuellement");
+			});
+		System.out.println("  État avant start(): " + vt3.getState());
+		vt3.start();
+		vt3.join();
+
+		// 4. Executors.newVirtualThreadPerTaskExecutor()
+		System.out.println("\n4. ExecutorService avec VT");
+		try (var executor = Executors.newVirtualThreadPerTaskExecutor()) {
+			executor.submit(() -> {
+				System.out.println("  VT via ExecutorService");
+			}).get();
+		} catch (Exception e) {
+			e.printStackTrace();
+		}
+
+		// 5. ThreadFactory personnalisé : pour frimer
+		System.out.println("\n5. ThreadFactory personnalisé");
+		ThreadFactory factory = Thread.ofVirtual()
+			.name("custom-vt-", 0)
+			.factory();
+
+		Thread vt5 = factory.newThread(() -> {
+			System.out.println("  VT: " + Thread.currentThread().getName());
+		});
+		vt5.start();
+		vt5.join();
+
+		System.out.println("\n=== Vérification ===");
+		System.out.println("Tous les threads étaient virtuels: " +
+			Stream.of(vt1, vt2, vt3, vt5)
+				.allMatch(Thread::isVirtual));
+	}
 }
-
-/* Output:
-
-=== 5 façons de créer des Virtual Threads ===
-
-1. Thread.startVirtualThread()
-  VT créé avec startVirtualThread()
-
-2. Thread.ofVirtual().start()
-  VT nommé: my-virtual-thread
-
-3. Thread.ofVirtual().unstarted()
-  État avant start(): NEW
-  VT démarré manuellement
-
-4. ExecutorService avec VT
-  VT via ExecutorService
-
-5. ThreadFactory personnalisé
-  VT: custom-vt-0
-
-=== Vérification ===
-Tous les threads étaient virtuels: true
-*/
 ```
 
 ### Vérifier si un thread est virtuel
 
 ```java
 public class VirtualThreadDetection {
-    
-    public static void main(String[] args) throws InterruptedException {
-        
-        // Platform Thread (thread actuel = main)
-        System.out.println("Thread main:");
-        printThreadInfo(Thread.currentThread());
-        
-        // Créer un Platform Thread
-        Thread platformThread = new Thread(() -> {
-            System.out.println("\nPlatform Thread:");
-            printThreadInfo(Thread.currentThread());
-        });
-        platformThread.start();
-        platformThread.join();
-        
-        // Créer un Virtual Thread
-        Thread.startVirtualThread(() -> {
-            System.out.println("\nVirtual Thread:");
-            printThreadInfo(Thread.currentThread());
-        }).join();
-    }
-    
-    private static void printThreadInfo(Thread thread) {
-        System.out.println("  Nom: " + thread.getName());
-        System.out.println("  ID: " + thread.threadId());
-        System.out.println("  isVirtual(): " + thread.isVirtual());
-        System.out.println("  isDaemon(): " + thread.isDaemon());
-        System.out.println("  Priority: " + thread.getPriority());
-        System.out.println("  ThreadGroup: " + thread.getThreadGroup());
-        System.out.println("  toString(): " + thread);
-    }
+
+	public static void main(String[] args) throws InterruptedException {
+
+		System.out.println("Thread main:");
+		printThreadInfo(Thread.currentThread());
+
+		// Créer un Platform Thread
+		Thread platformThread = new Thread(() -> {
+			System.out.println("\nPlatform Thread:");
+			printThreadInfo(Thread.currentThread());
+		});
+		platformThread.start();
+		platformThread.join();
+
+		// Créer un Virtual Thread
+		Thread.startVirtualThread(() -> {
+			System.out.println("\nVirtual Thread:");
+			printThreadInfo(Thread.currentThread());
+		}).join();
+	}
+
+	private static void printThreadInfo(Thread thread) {
+		System.out.println("  Nom: " + thread.getName());
+		System.out.println("  ID: " + thread.threadId());
+		System.out.println("  isVirtual(): " + thread.isVirtual());
+		System.out.println("  isDaemon(): " + thread.isDaemon());
+		System.out.println("  Priority: " + thread.getPriority());
+		System.out.println("  ThreadGroup: " + thread.getThreadGroup());
+		System.out.println("  toString(): " + thread);
+	}
 }
-
-/* Output:
-
-Thread main:
-  Nom: main
-  ID: 1
-  isVirtual(): false
-  isDaemon(): false
-  Priority: 5
-  ThreadGroup: java.lang.ThreadGroup[name=main,maxpri=10]
-  toString(): Thread[#1,main,5,main]
-
-Platform Thread:
-  Nom: Thread-0
-  ID: 21
-  isVirtual(): false
-  isDaemon(): false
-  Priority: 5
-  ThreadGroup: java.lang.ThreadGroup[name=main,maxpri=10]
-  toString(): Thread[#21,Thread-0,5,main]
-
-Virtual Thread:
-  Nom: <empty>
-  ID: 22
-  isVirtual(): true
-  isDaemon(): true
-  isDaemon(): true  ← Toujours daemon!
-  Priority: 5
-  ThreadGroup: null  ← Pas de ThreadGroup!
-  toString(): VirtualThread[#22]/runnable@ForkJoinPool-1-worker-1
-
-Différences clés:
-• isVirtual() = true
-• Toujours daemon (pas besoin de setDaemon())
-• Pas de ThreadGroup (obsolète avec VT)
-• toString() indique "VirtualThread" et le carrier
-*/
 ```
 
 ---
@@ -714,238 +598,169 @@ Différences clés:
 ### Démonstration du unmounting automatique
 
 ```java
-import java.util.concurrent.atomic.AtomicInteger;
 
 public class BlockingIsFreeDemo {
-    
-    private static final AtomicInteger activeCarriers = new AtomicInteger(0);
-    
-    public static void main(String[] args) throws InterruptedException {
-        
-        System.out.println("=== Démonstration: Blocking is Free ===\n");
-        System.out.println("CPUs disponibles: " + 
-            Runtime.getRuntime().availableProcessors());
-        System.out.println("Carriers attendus: ~" + 
-            Runtime.getRuntime().availableProcessors());
-        
-        System.out.println("\nLancement de 10,000 VT qui dorment 5 secondes...\n");
-        
-        List<Thread> threads = new ArrayList<>();
-        long start = System.currentTimeMillis();
-        
-        for (int i = 0; i < 10_000; i++) {
-            Thread vt = Thread.startVirtualThread(() -> {
-                try {
-                    // Démontage du VT car bloquage
-                    Thread.sleep(5000);
-                    
-                    // Après réveil: remonté sur un carrier
-                    System.out.print(".");
-                    
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                }
-            });
-            threads.add(vt);
-        }
-        
-        long launchTime = System.currentTimeMillis() - start;
-        System.out.println("Temps de lancement: " + launchTime + " ms");
-        
-        // Attendre tous les threads
-        System.out.println("\nEn attente de tous les VT...");
-        for (Thread t : threads) {
-            t.join();
-        }
-        
-        long totalTime = System.currentTimeMillis() - start;
-        
-        System.out.println("\n\n=== Résultats ===");
-        System.out.println("Temps total: " + totalTime + " ms");
-        System.out.println("10,000 VT dormant 5 secondes chacun");
-        System.out.println("Temps théorique (séquentiel): 50,000 secondes");
-        System.out.println("Temps réel: ~5 secondes");
-        System.out.println("\n  Les 10,000 VT ont dormi EN PARALLÈLE!");
-        System.out.println(" Utilisant seulement ~" + 
-            Runtime.getRuntime().availableProcessors() + " carriers!");
-        
-        System.out.println("\nAvec Platform Threads:");
-        System.out.println("• 10,000 threads = 20 GB de mémoire → IMPOSSIBLE");
-        System.out.println("• Context switching → Performance catastrophique");
-        
-        System.out.println("\nAvec Virtual Threads:");
-        System.out.println("• 10,000 VT = ~15 MB de mémoire → FACILE");
-        System.out.println("• Pendant sleep(): VT démontés → carriers libres");
-        System.out.println("• Zéro gaspillage de ressources!");
-    }
+
+
+	public static void main(String[] args) throws InterruptedException {
+
+		System.out.println("=== Démonstration: Blocking is Free ===\n");
+		System.out.println("CPUs disponibles: " +
+			Runtime.getRuntime().availableProcessors());
+		System.out.println("Carriers attendus: ~" +
+			Runtime.getRuntime().availableProcessors());
+
+		System.out.println("\nLancement de 10,000 VT qui dorment 5 secondes...\n");
+
+		List<Thread> threads = new ArrayList<>();
+		long start = System.currentTimeMillis();
+
+		for (int i = 0; i < 10_000; i++) {
+			Thread vt = Thread.startVirtualThread(() -> {
+				try {
+					Thread.sleep(5000);
+
+					System.out.println("<3 VT réveillé <3");
+				} catch (InterruptedException e) {
+					Thread.currentThread().interrupt();
+				}
+			});
+			threads.add(vt);
+		}
+
+		long launchTime = System.currentTimeMillis() - start;
+		System.out.println("Temps de lancement: " + launchTime + " ms");
+
+		System.out.println("\nEn attente de tous les VT...");
+		for (Thread t : threads) {
+			t.join();
+		}
+
+		long totalTime = System.currentTimeMillis() - start;
+
+		System.out.println("\n\n=== Résultats ===");
+		System.out.println("Temps total: " + totalTime + " ms");
+		System.out.println("10,000 VT dormant 5 secondes chacun");
+		System.out.println("Temps théorique (séquentiel): 50,000 secondes");
+		System.out.println("Temps réel: <10 secondes");
+		System.out.println("\n  Les 10,000 VT ont dormi en parallèle");
+		System.out.println(" Utilisant seulement ~" +
+			Runtime.getRuntime().availableProcessors() + " carriers");
+
+		System.out.println("\nAvec Platform Threads:");
+		System.out.println("• 10,000 threads = 20 GB de mémoire → IMPOSSIBLE");
+		System.out.println("• Context switching → Performance catastrophique");
+
+		System.out.println("\nAvec Virtual Threads:");
+		System.out.println("• 10,000 VT = ~15 MB de mémoire → FACILE");
+		System.out.println("• Pendant sleep(): VT démontés → carriers libres, CPU dispo pour autres tâches");
+		System.out.println("• Zéro gaspillage de ressources");
+	}
 }
 
-/* Output typique:
-
-=== Démonstration: Blocking is Free ===
-
-CPUs disponibles: 8
-Carriers attendus: ~8
-
-Lancement de 10,000 VT qui dorment 5 secondes...
-
-Temps de lancement: 125 ms
-.............................................................
-(10,000 points affichés pendant ~5 secondes)
-
-=== Résultats ===
-Temps total: 5156 ms
-10,000 VT dormant 5 secondes chacun
-Temps théorique (séquentiel): 50,000 secondes
-Temps réel: ~5 secondes
-
- Les 10,000 VT ont dormi EN PARALLÈLE!
- Utilisant seulement ~8 carriers!
-
-Avec Platform Threads:
-• 10,000 threads = 20 GB de mémoire → IMPOSSIBLE
-• Context switching → Performance catastrophique
-
-Avec Virtual Threads:
-• 10,000 VT = ~15 MB de mémoire → FACILE
-• Pendant sleep(): VT démontés → carriers libres
-• Zéro gaspillage de ressources!
-
-Explication:
-1. 10,000 VT lancés rapidement (~125ms)
-2. Tous appellent Thread.sleep(5000)
-3. JVM détecte le blocage → démonte les 10,000 VT
-4. Les ~8 carriers restent LIBRES
-5. Après 5 secondes: 10,000 VT se réveillent
-6. JVM les remonte progressivement sur les 8 carriers
-7. Temps total: ~5 secondes (parallélisme parfait!)
-*/
 ```
 
 ### Comparaison avec Platform Threads
 
+On va maintenant essayer de comparer les performances entre Platform Threads et Virtual Threads dans un scénario I/O bloquant simulé (avec Thread.sleep()).
+
 ```java
-public class PlatformVsVirtualBlocking {
-    
-    public static void main(String[] args) throws Exception {
-        
-        int numTasks = 1000;
-        
-        System.out.println("=== Test: 1000 tâches avec I/O bloquant ===\n");
-        
-        // Test 1: Platform Threads (pool de 50)
-        System.out.println("1. Platform Threads (pool de 50):");
-        long platformTime = testPlatformThreads(numTasks, 50);
-        
-        // Test 2: Virtual Threads
-        System.out.println("\n2. Virtual Threads:");
-        long virtualTime = testVirtualThreads(numTasks);
-        
-        // Comparaison
-        System.out.println("\n=== Comparaison ===");
-        System.out.println("Platform Threads: " + platformTime + " ms");
-        System.out.println("Virtual Threads:  " + virtualTime + " ms");
-        System.out.println("Speedup: " + 
-            String.format("%.1f", (double) platformTime / virtualTime) + "×");
-    }
-    
-    private static long testPlatformThreads(int numTasks, int poolSize) 
-            throws Exception {
-        
-        ExecutorService executor = Executors.newFixedThreadPool(poolSize);
-        
-        long start = System.currentTimeMillis();
-        
-        List<Future<?>> futures = new ArrayList<>();
-        for (int i = 0; i < numTasks; i++) {
-            futures.add(executor.submit(() -> {
-                try {
-                    // Simulation I/O bloquant
-                    Thread.sleep(100);
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                }
-            }));
-        }
-        
-        for (Future<?> future : futures) {
-            future.get();
-        }
-        
-        long duration = System.currentTimeMillis() - start;
-        
-        executor.shutdown();
-        
-        System.out.println("  Pool size: " + poolSize);
-        System.out.println("  Durée: " + duration + " ms");
-        System.out.println("  Throughput: " + 
-            String.format("%.0f", numTasks * 1000.0 / duration) + " tasks/sec");
-        
-        return duration;
-    }
-    
-    private static long testVirtualThreads(int numTasks) throws Exception {
-        
-        try (var executor = Executors.newVirtualThreadPerTaskExecutor()) {
-            
-            long start = System.currentTimeMillis();
-            
-            List<Future<?>> futures = new ArrayList<>();
-            for (int i = 0; i < numTasks; i++) {
-                futures.add(executor.submit(() -> {
-                    try {
-                        // Simulation I/O bloquant
-                        Thread.sleep(100);
-                    } catch (InterruptedException e) {
-                        Thread.currentThread().interrupt();
-                    }
-                }));
-            }
-            
-            for (Future<?> future : futures) {
-                future.get();
-            }
-            
-            long duration = System.currentTimeMillis() - start;
-            
-            System.out.println("  Carriers: ~" + 
-                Runtime.getRuntime().availableProcessors());
-            System.out.println("  Durée: " + duration + " ms");
-            System.out.println("  Throughput: " + 
-                String.format("%.0f", numTasks * 1000.0 / duration) + " tasks/sec");
-            
-            return duration;
-        }
-    }
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+
+public class PlateformVsVirtualBlockingScenarii {
+
+	public static void main(String[] args) throws Exception {
+
+		System.out.println("=== Test: 1000 tâches avec I/O bloquant ===\n");
+
+		// Test 1: Platform Threads (pool de 50)
+		System.out.println("1. Platform Threads (pool de 50):");
+		long platformTime = testPlatformThreads(1000);
+
+		// Test 2: Virtual Threads
+		System.out.println("\n2. Virtual Threads:");
+		long virtualTime = testVirtualThreads(1000);
+
+		System.out.println("\n=== Comparaison ===");
+		System.out.println("Platform Threads: " + platformTime + " ms");
+		System.out.println("Virtual Threads:  " + virtualTime + " ms");
+		System.out.println("Speedup: " +
+			String.format("%.1f", (double) platformTime / virtualTime) + "×");
+	}
+
+	private static long testPlatformThreads(int numTasks) throws Exception {
+
+		ExecutorService executor = Executors.newFixedThreadPool(50);
+
+		long start = System.currentTimeMillis();
+
+		List<Future<?>> futures = new ArrayList<>();
+		for (int i = 0; i < numTasks; i++) {
+			futures.add(executor.submit(() -> {
+				try {
+					Thread.sleep(100);
+				} catch (InterruptedException e) {
+					Thread.currentThread().interrupt();
+				}
+			}));
+		}
+
+		for (Future<?> future : futures) {
+			future.get();
+		}
+
+		long duration = System.currentTimeMillis() - start;
+
+		executor.shutdown();
+
+		System.out.println("  Pool size: " + 50);
+		System.out.println("  Durée: " + duration + " ms");
+		System.out.println("  Throughput: " +
+			String.format("%.0f", numTasks * 1000.0 / duration) + " tasks/sec");
+
+		return duration;
+	}
+
+	private static long testVirtualThreads(int numTasks) throws Exception {
+
+		try (var executor = Executors.newVirtualThreadPerTaskExecutor()) {
+
+			long start = System.currentTimeMillis();
+
+			List<Future<?>> futures = new ArrayList<>();
+			for (int i = 0; i < numTasks; i++) {
+				futures.add(executor.submit(() -> {
+					try {
+						// Simulation I/O bloquant
+						Thread.sleep(100);
+					} catch (InterruptedException e) {
+						Thread.currentThread().interrupt();
+					}
+				}));
+			}
+
+			for (Future<?> future : futures) {
+				future.get();
+			}
+
+			long duration = System.currentTimeMillis() - start;
+
+			System.out.println("  Carriers: ~" +
+				Runtime.getRuntime().availableProcessors());
+			System.out.println("  Durée: " + duration + " ms");
+			System.out.println("  Throughput: " +
+				String.format("%.0f", numTasks * 1000.0 / duration) + " tasks/sec");
+
+			return duration;
+		}
+	}
 }
 
-/* Output typique (machine 8 cores):
-
-=== Test: 1000 tâches avec I/O bloquant ===
-
-1. Platform Threads (pool de 50):
-  Pool size: 50
-  Durée: 2050 ms
-  Throughput: 488 tasks/sec
-
-2. Virtual Threads:
-  Carriers: ~8
-  Durée: 125 ms
-  Throughput: 8000 tasks/sec
-
-=== Comparaison ===
-Platform Threads: 2050 ms
-Virtual Threads:  125 ms
-Speedup: 16.4×
-
-Analyse:
-• Platform Threads: 50 tâches parallèles max
-  → 1000 / 50 = 20 "rounds" × 100ms = 2000ms
-• Virtual Threads: 1000 tâches vraiment parallèles
-  → Toutes en même temps = 100ms + overhead
-• Speedup: 16× plus rapide!
-• Avec seulement 8 carriers vs 50 platform threads!
-*/
 ```
 
 ---
@@ -1081,122 +896,115 @@ Situations qui "épinglent" un VT au carrier:
 
 ### Démonstration du problème
 
+Ici, on va décortiquer la notion de pinning en mesurant l'impact de différentes approches de synchronisation sur les performances des Virtual Threads.
+L'objectif est de montrer comment l'utilisation de `synchronized` peut entraîner un pinning, et comment utiliser `ReentrantLock` peut éviter ce problème.
+
 ```java
-import java.util.concurrent.locks.ReentrantLock;
+import java.time.Duration;
+import java.time.Instant;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executors;
 
-public class PinnedThreadDemo {
-    
-    private static final Object syncLock = new Object();
-    private static final ReentrantLock reentrantLock = new ReentrantLock();
-    
-    public static void main(String[] args) throws InterruptedException {
-        
-        System.out.println("=== Démonstration Pinned Threads ===\n");
-        
-        int numThreads = 1000;
-        
-        // Test 1: Avec synchronized (PINNED)
-        System.out.println("1. Avec synchronized (pinned):");
-        long pinnedTime = testPinned(numThreads);
-        
-        // Test 2: Avec ReentrantLock (PAS PINNED)
-        System.out.println("\n2. Avec ReentrantLock (non-pinned):");
-        long unpinnedTime = testUnpinned(numThreads);
-        
-        // Comparaison
-        System.out.println("\n=== Résultats ===");
-        System.out.println("Avec synchronized: " + pinnedTime + " ms");
-        System.out.println("Avec ReentrantLock: " + unpinnedTime + " ms");
-        
-        if (pinnedTime > unpinnedTime * 1.5) {
-            System.out.println("\n⚠️  synchronized cause du pinning!");
-            System.out.println("Performance dégradée de " + 
-                String.format("%.0f", (pinnedTime / (double) unpinnedTime - 1) * 100) + "%");
-        }
-    }
+public class VirtualThreadPinningDemo {
 
-    //ICI synchronized utilisé
-    private static long testPinned(int numThreads) throws InterruptedException {
-        
-        long start = System.currentTimeMillis();
-        
-        List<Thread> threads = new ArrayList<>();
-        for (int i = 0; i < numThreads; i++) {
-            Thread vt = Thread.startVirtualThread(() -> {
-                synchronized (syncLock) {
-                    try {
-                        Thread.sleep(10);
-                    } catch (InterruptedException e) {
-                        Thread.currentThread().interrupt();
-                    }
-                }
-            });
-            threads.add(vt);
-        }
-        
-        for (Thread t : threads) {
-            t.join();
-        }
-        
-        long duration = System.currentTimeMillis() - start;
-        System.out.println("  Durée: " + duration + " ms");
-        
-        return duration;
-    }
-    
-    //ICI pas de synchronized utilisé
-    private static long testUnpinned(int numThreads) throws InterruptedException {
-        
-        long start = System.currentTimeMillis();
-        
-        List<Thread> threads = new ArrayList<>();
-        for (int i = 0; i < numThreads; i++) {
-            Thread vt = Thread.startVirtualThread(() -> {
-                reentrantLock.lock();
-                try {
-                    Thread.sleep(10);
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                } finally {
-                    reentrantLock.unlock();
-                }
-            });
-            threads.add(vt);
-        }
-        
-        for (Thread t : threads) {
-            t.join();
-        }
-        
-        long duration = System.currentTimeMillis() - start;
-        System.out.println("  Durée: " + duration + " ms");
-        
-        return duration;
-    }
+	private static final int NB_TACHES = 1000;
+
+	public static void main(String[] args) throws InterruptedException {
+		int cpus = Runtime.getRuntime().availableProcessors();
+		System.out.println("=== Démonstration du Pinning avec Virtual Threads ===");
+		System.out.println("Processeurs disponibles: " + cpus);
+		System.out.println("Nombre de tâches: " + NB_TACHES + " (chacune sleep 100ms avec son propre lock)\n");
+
+		System.out.println("Virtual Threads SANS pinning (pas de lock):");
+		long tempsSansLock = executerSansLock();
+		System.out.println("   → Temps total: " + tempsSansLock + " ms\n");
+
+		System.out.println("Virtual Threads AVEC pinning (synchronized sur lock individuel):");
+		System.out.println("Chaque VT monopolise un platform thread pendant le sleep");
+		long tempsAvecPinning = executerAvecSynchronized();
+		System.out.println("   → Temps total: " + tempsAvecPinning + " ms\n");
+
+		System.out.println("Virtual Threads SANS pinning (ReentrantLock individuel):");
+		System.out.println("Les VT se démontent pendant le sleep");
+		long tempsSansPinning = executerAvecReentrantLock();
+		System.out.println("   → Temps total: " + tempsSansPinning + " ms\n");
+
+		System.out.println("=== RÉSULTATS COMPARATIFS ===");
+		System.out.println("   Sans lock (optimal):        " + tempsSansLock + " ms");
+		System.out.println("   Avec pinning (synchronized): " + tempsAvecPinning + " ms  (+" +
+			String.format("%.0f%%", (tempsAvecPinning - tempsSansLock) * 100.0 / tempsSansLock) + ")");
+		System.out.println("   Sans pinning (ReentrantLock):" + tempsSansPinning + " ms  (+" +
+			String.format("%.0f%%", (tempsSansPinning - tempsSansLock) * 100.0 / tempsSansLock) + ")");
+	}
+
+	private static long executerSansLock() throws InterruptedException {
+		var executor = Executors.newVirtualThreadPerTaskExecutor();
+		var latch = new CountDownLatch(NB_TACHES);
+		var debut = Instant.now();
+
+		for (int i = 0; i < NB_TACHES; i++) {
+			executor.submit(() -> {
+				sleep(100);
+				latch.countDown();
+			});
+		}
+
+		latch.await();
+		executor.close();
+		return Duration.between(debut, Instant.now()).toMillis();
+	}
+
+	private static long executerAvecSynchronized() throws InterruptedException {
+		var executor = Executors.newVirtualThreadPerTaskExecutor();
+		var latch = new CountDownLatch(NB_TACHES);
+		var debut = Instant.now();
+
+		for (int i = 0; i < NB_TACHES; i++) {
+			final Object lock = new Object();
+			executor.submit(() -> {
+				synchronized (lock) {
+					sleep(100);
+				}
+				latch.countDown();
+			});
+		}
+
+		latch.await();
+		executor.close();
+		return Duration.between(debut, Instant.now()).toMillis();
+	}
+
+	private static long executerAvecReentrantLock() throws InterruptedException {
+		var executor = Executors.newVirtualThreadPerTaskExecutor();
+		var latch = new CountDownLatch(NB_TACHES);
+		var debut = Instant.now();
+
+		for (int i = 0; i < NB_TACHES; i++) {
+			executor.submit(() -> {
+				var lock = new java.util.concurrent.locks.ReentrantLock();
+				lock.lock();
+				try {
+					sleep(100);
+				} finally {
+					lock.unlock();
+				}
+				latch.countDown();
+			});
+		}
+
+		latch.await();
+		executor.close();
+		return Duration.between(debut, Instant.now()).toMillis();
+	}
+
+	private static void sleep(int ms) {
+		try {
+			Thread.sleep(ms);
+		} catch (InterruptedException e) {
+			Thread.currentThread().interrupt();
+		}
+	}
 }
-
-/* Output typique:
-
-=== Démonstration Pinned Threads ===
-
-1. Avec synchronized (pinned):
-  Durée: 850 ms
-
-2. Avec ReentrantLock (non-pinned):
-  Durée: 145 ms
-
-=== Résultats ===
-Avec synchronized: 850 ms
-Avec ReentrantLock: 145 ms
-
-⚠️  synchronized cause du pinning!
-Performance dégradée de 486%
-
-Explication:
-• Avec synchronized: VT épinglés → carriers bloqués
-• Avec ReentrantLock: VT se démontent → carriers libres
-• Ratio: ~6× plus lent avec synchronized!
-*/
 ```
 
 ### Solution : Éviter le pinning

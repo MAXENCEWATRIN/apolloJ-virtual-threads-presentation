@@ -8,7 +8,27 @@
 
 ### Le mapping 1:1
 
-Depuis Java 1.2, Java utilise un modèle **1:1** : chaque thread Java correspond à **exactement un thread du système d'exploitation**.
+### Le mapping 1:1
+
+**Depuis Java 1.2 (1998)**, Java utilise un modèle **1:1** appelé "native threads" : 
+chaque thread Java (`java.lang.Thread`) correspond à **exactement un thread du 
+système d'exploitation** (pthread sur Linux/Unix, thread Windows).
+
+**Historique très rapide :**
+- **Java 1.0-1.1** : "Green Threads" (threads légers gérés par la JVM, modèle M:N)
+- **Java 1.2+** : Passage au modèle 1:1 pour de meilleures performances
+- **Java 21** : Introduction des Virtual Threads (retour à un modèle M:N moderne)
+
+Ce choix de 1:1 en 1998 était justifié à l'époque par :
+
+- ✅ Meilleure exploitation des CPU multi-cœurs
+- ✅ Intégration avec les outils système (debuggers, profilers)
+- ❌ Mais limitation du nombre de threads (~5,000 max)
+
+
+Donc en somme, java 1.2 et le modèle 1 vers 1 répondait à une logique de l'époque. 
+Les CPU commençaient à gagner en coeurs et permettaient donc une meilleure performance.
+Aujourd'hui, les systèmes embarquant du java sont pour la plupart demandeur de démultiplication de processus d'éxécution (web), à contrario de calcul CPU pur (Sytème mebarqué).
 
 ```
 ┌─────────────────────────────────────────────────────────┐
@@ -159,42 +179,42 @@ thread.start();
                         ▼
 ┌─────────────────────────────────────────────────────────┐
 │ 2. thread.start()                                       │
-│    a) Vérification état (IllegalThreadStateException)   │
+│    a) Vérification état                                 │
 │    b) Appel native: start0()                            │
 └─────────────────────────────────────────────────────────┘
                         │
                         ▼
 ┌─────────────────────────────────────────────────────────┐
-│ 3. JNI Call → JVM Native Code                          │
-│    • JVM_StartThread() (hotspot/src/share/vm/prims)    │
+│ 3. JNI Call → JVM Native Code                           │
+│    • JVM_StartThread() (hotspot/src/share/vm/prims)     │
 │    • Création JavaThread interne                        │
 │    • Allocation OSThread                                │
 └─────────────────────────────────────────────────────────┘
                         │
                         ▼
 ┌─────────────────────────────────────────────────────────┐
-│ 4. OS Thread Creation (syscall)                        │
-│    Linux: pthread_create(&tid, &attr, start_func, arg) │
-│    Windows: CreateThread(...)                          │
-│    • Allocation stack: ~2 MB                           │
-│    • Création TCB dans kernel                          │
-│    • Coût: ~0.2-1 ms                                   │
+│ 4. OS Thread Creation (syscall)                         │
+│    Linux: pthread_create(&tid, &attr, start_func, arg)  │
+│    Windows: CreateThread(...)                           │
+│    • Allocation stack: ~2 MB                            │
+│    • Création TCB dans kernel                           │
+│    • Coût: ~0.2-1 ms                                    │
 └─────────────────────────────────────────────────────────┘
                         │
                         ▼
 ┌─────────────────────────────────────────────────────────┐
-│ 5. OS Scheduler                                        │
-│    • Thread ajouté à la run queue                      │
-│    • Attente d'un CPU disponible                       │
-│    • Peut prendre du temps si système chargé           │
+│ 5. OS Scheduler                                         │
+│    • Thread ajouté à la run queue                       │
+│    • Attente d'un CPU disponible                        │
+│    • Peut prendre du temps si système chargé            │
 └─────────────────────────────────────────────────────────┘
                         │
                         ▼
 ┌─────────────────────────────────────────────────────────┐
-│ 6. Exécution run()                                     │
-│    • Thread obtient un CPU core                        │
-│    • Exécution du code Runnable                        │
-│    • Création frames sur le thread stack               │
+│ 6. Exécution run()                                      │
+│    • Thread obtient un CPU core                         │
+│    • Exécution du code Runnable                         │
+│    • Création frames sur le thread stack                │
 └─────────────────────────────────────────────────────────┘
 ```
 
@@ -264,10 +284,7 @@ Thread
 │ Bloqué par       │ JVM             │ OS kernel        │
 ├──────────────────┼─────────────────┼──────────────────┤
 │ Libéré quand     │ Lock disponible │ I/O terminée     │
-├──────────────────┼─────────────────┼──────────────────┤
-│ Problème avec    │ Pinning si      │ Démontage auto   │
-│ Virtual Threads  │ synchronized    │ ✅ OK            │
-└──────────────────┴─────────────────┴──────────────────┘
+└──────────────────┼─────────────────┼──────────────────┘
 
 ### Visualisation avec code instrumenté
 
@@ -516,161 +533,123 @@ Bilan:
 ### Appel API REST
 
 ```java
-import java.net.URI;
-import java.net.http.*;
-import java.time.Duration;
-
 public class HttpThreadExample {
-    
-    private static final HttpClient httpClient = HttpClient.newBuilder()
-        .connectTimeout(Duration.ofSeconds(10))
-        .build();
-    
-    public static void main(String[] args) throws InterruptedException {
-        
-        // Lancer 100 threads qui appellent une API
-        Thread[] threads = new Thread[100];
-        
-        long globalStart = System.currentTimeMillis();
-        
-        for (int i = 0; i < 100; i++) {
-            final int requestId = i;
-            threads[i] = new Thread(() -> {
-                callExternalAPI(requestId);
-            }, "HTTP-Thread-" + i);
-            
-            threads[i].start();
-        }
-        
-        // Attendre tous les threads
-        for (Thread t : threads) {
-            t.join();
-        }
-        
-        long totalTime = System.currentTimeMillis() - globalStart;
-        System.out.println("\n=== RÉSUMÉ ===");
-        System.out.println("100 requêtes HTTP en " + totalTime + "ms");
-        System.out.println("Throughput: " + (100.0 / totalTime * 1000) + " req/s");
-    }
-    
-    private static void callExternalAPI(int requestId) {
-        try {
-            long start = System.nanoTime();
-            
-            // Préparer requête
-            HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create("https://jsonplaceholder.typicode.com/posts/" + requestId))
-                .GET()
-                .build();
-            
-            System.out.println("[" + Thread.currentThread().getName() + 
-                "] Envoi requête HTTP...");
-            
-            // ⚠️ ICI LE THREAD SE BLOQUE
-            // send() est SYNCHRONE et BLOQUANT
-            // Le thread attend la réponse réseau
-            HttpResponse<String> response = httpClient.send(
-                request,
-                HttpResponse.BodyHandlers.ofString()
-            );
-            
-            long duration = (System.nanoTime() - start) / 1_000_000;
-            
-            System.out.println("[" + Thread.currentThread().getName() + 
-                "] Réponse reçue en " + duration + "ms (status: " + 
-                response.statusCode() + ", body length: " + 
-                response.body().length() + ")");
-            
-        } catch (Exception e) {
-            System.err.println("[" + Thread.currentThread().getName() + 
-                "] Erreur: " + e.getMessage());
-        }
-    }
+
+	private static final HttpClient httpClient = HttpClient.newBuilder()
+		.connectTimeout(Duration.ofSeconds(10))
+		.proxy(ProxySelector.getDefault())
+		.build();
+
+	private static HttpRequest createRequest(int requestId) {
+		return HttpRequest.newBuilder()
+			.uri(URI.create("XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"))
+			.header("User-Agent", "Mozilla/5.0")
+			.header("x-auth-token", "Mozilla/5.0")
+			.GET()
+			.build();
+	}
+
+	public static void main(String[] args) throws InterruptedException {
+
+		Thread[] threads = new Thread[1];
+
+		long globalStart = System.currentTimeMillis();
+
+		for (int i = 0; i < threads.length; i++) {
+			final int requestId = i;
+			threads[i] = new Thread(() -> {
+				callExternalAPI(requestId);
+			}, "HTTP-Thread-" + i);
+
+			threads[i].start();
+		}
+
+		for (Thread t : threads) {
+			t.join();
+		}
+
+		long totalTime = System.currentTimeMillis() - globalStart;
+		System.out.println("\n=== RÉSUMÉ ===");
+		System.out.println("100 requêtes HTTP en " + totalTime + "ms");
+		System.out.println("Throughput: " + (100.0 / totalTime * 1000) + " req/s");
+	}
+
+	private static void callExternalAPI(int requestId) {
+		try {
+			long start = System.nanoTime();
+
+			System.out.println("[" + Thread.currentThread().getName() +
+				"] Envoi requête HTTP...");
+
+
+			// Le thread attend la réponse réseau car Send fait partie des opérations bloquantes I/O
+			HttpRequest request = createRequest(requestId);
+			HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+
+			long duration = (System.nanoTime() - start) / 1_000_000;
+
+			System.out.println("[" + Thread.currentThread().getName() +
+				"] Réponse reçue en " + duration + "ms (status: " +
+				response.statusCode() + ", body length: " +
+				response.body().length() + ")");
+
+		} catch (Exception e) {
+			System.err.println("[" + Thread.currentThread().getName() +
+				"] Erreur: " + e.getMessage());
+		}
+	}
 }
-
-/* Output typique:
-
-[HTTP-Thread-0] Envoi requête HTTP...
-[HTTP-Thread-1] Envoi requête HTTP...
-[HTTP-Thread-2] Envoi requête HTTP...
-...
-[HTTP-Thread-0] Réponse reçue en 145ms (status: 200, body length: 292)
-[HTTP-Thread-1] Réponse reçue en 156ms (status: 200, body length: 292)
-...
-
-=== RÉSUMÉ ===
-100 requêtes HTTP en 3200ms
-Throughput: 31.25 req/s
-
-Problème:
-- 100 threads créés = 200 MB de mémoire
-- Chaque thread bloqué ~150ms sur I/O réseau
-- CPU utilization: ~5%
-- Avec 10,000 requêtes → OutOfMemoryError ou thrashing
-*/
 ```
 
 ### Comparaison : approche asynchrone (avant java 21 Project LOOM)
 
 ```java
 public class HttpAsyncExample {
-    
-    private static final HttpClient httpClient = HttpClient.newHttpClient();
-    
-    public static void main(String[] args) throws InterruptedException {
-        
-        long globalStart = System.currentTimeMillis();
-        
-        // Approche async: pas de création de threads !
-        List<CompletableFuture<HttpResponse<String>>> futures = new ArrayList<>();
-        
-        for (int i = 0; i < 100; i++) {
-            final int requestId = i;
-            
-            HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create("https://jsonplaceholder.typicode.com/posts/" + requestId))
-                .GET()
-                .build();
-            
-            // sendAsync() retourne immédiatement
-            // Pas de blocage !
-            CompletableFuture<HttpResponse<String>> future = 
-                httpClient.sendAsync(request, HttpResponse.BodyHandlers.ofString())
-                    .thenApply(response -> {
-                        System.out.println("Réponse " + requestId + 
-                            ": status=" + response.statusCode());
-                        return response;
-                    });
-            
-            futures.add(future);
-        }
-        
-        // Attendre toutes les réponses
-        CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
-        
-        long totalTime = System.currentTimeMillis() - globalStart;
-        System.out.println("\n=== RÉSUMÉ ASYNC ===");
-        System.out.println("100 requêtes HTTP en " + totalTime + "ms");
-        System.out.println("Throughput: " + (100.0 / totalTime * 1000) + " req/s");
-    }
+
+	private static final HttpClient httpClient = HttpClient.newBuilder()
+		.connectTimeout(Duration.ofSeconds(10))
+		.proxy(ProxySelector.getDefault())
+		.build();
+
+	private static HttpRequest createRequest(int requestId) {
+		return HttpRequest.newBuilder()
+			.uri(URI.create("XXXXXXXXXXXXXXXXXXXXXXXXXX"))
+			.header("User-Agent", "Mozilla/5.0")
+			.header("x-auth-token", "eyJhbGciOiJIUzUxMiJ9.eyJpYXQiOjE3NjIyMzk1MjksImV4cCI6MTc2MjI1MzkyOSwic3ViIjoiU1NDRDFEOU4iLCJzdXBlcnZpc2lvblVzZXIiOnRydWUsImhhc1MyQ0F1dGhvcml6YXRpb24iOnRydWUsImRyQ29kZSI6Ijk1MTAifQ.0kHqb1XygEmTOGbMUNj3OwUpBqp-v8Bt5T84uuRSnWzywR3m3ou6eFGJUTDxdW3tFE-FScl_-IpEFpPXGN7mjQ")
+			.GET()
+			.build();
+	}
+
+	public static void main(String[] args) {
+
+		long globalStart = System.currentTimeMillis();
+
+		List<CompletableFuture<HttpResponse<String>>> futures = new ArrayList<>();
+
+		for (int i = 0; i < 100; i++) {
+			final int requestId = i;
+
+			// sendAsync() n'utilise pas de Thread dédié, car il s'appuie sur le
+			// mécanisme des NIO Channels et des callbacks. (NIO = Non Blocking I/O)
+			CompletableFuture<HttpResponse<String>> future =
+				httpClient.sendAsync(createRequest(requestId), HttpResponse.BodyHandlers.ofString())
+					.thenApply(response -> {
+						System.out.println("Réponse " + requestId +
+							": status=" + response.statusCode());
+						return response;
+					});
+
+			futures.add(future);
+		}
+
+		CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
+
+		long totalTime = System.currentTimeMillis() - globalStart;
+		System.out.println("\n=== RÉSUMÉ ASYNC ===");
+		System.out.println("100 requêtes HTTP en " + totalTime + "ms");
+		System.out.println("Throughput: " + (100.0 / totalTime * 1000) + " req/s");
+	}
 }
-
-/* Output typique:
-
-=== RÉSUMÉ ASYNC ===
-100 requêtes HTTP en 180ms
-Throughput: 555.55 req/s
-
-Avantages:
-- Beaucoup plus rapide (180ms vs 3200ms)
-- Pas de création de threads
-- Meilleur throughput
-
-Inconvénients:
-- Code plus complexe (CompletableFuture, lambdas)
-- Difficile à debugger
-- Gestion erreurs complexe
-*/
 ```
 
 ---
@@ -679,58 +658,56 @@ Inconvénients:
 
 ### ExecutorService et Thread Pools
 
-La réutilisabilité des Threads.
+La réutilisabilité des Threads. Les Threads pools sont des "lots" de threads OS pré-créés et gérés par la JVM via l'API `ExecutorService`.
+En réutilisant les threads existants pour exécuter plusieurs tâches, on évite le coût élevé de création et destruction de threads, surtout dans les applications avec un grand nombre de tâches courtes.
+C'était jusqu'à Java 21 la seule solution pour gérer efficacement de nombreux threads.
+
+Lors de la création d'un ExecutorService avec Executors.newFixedThreadPool(n), n threads OS sont créés une seule fois au démarrage.
+Ces threads restent actifs et en attente de tâches (état WAITING quand ils n'ont rien à faire).
+Quand une tâche est soumise via submit() ou execute(), elle est assignée à un thread disponible du pool.
+Une fois la tâche terminée, le thread retourne dans le pool et attend une nouvelle tâche au lieu d'être détruit.
+Avantages :
+- Performance : évite le coût de création/destruction répétée de threads OS.
+- Contrôle : limite le nombre de threads actifs simultanément (évite la surcharge système).
+- Réutilisation : un même thread OS peut exécuter plusieurs tâches successives.
+
 ```java
 import java.util.concurrent.*;
 
 public class ThreadPoolExample {
-    
-    public static void main(String[] args) throws InterruptedException {
-        
-        // Pool de taille fixe : 4 threads OS
-        ExecutorService executor = Executors.newFixedThreadPool(4);
-        
-        System.out.println("=== Pool créé avec 4 threads ===\n");
-        
-        // Soumettre 10 tâches
-        for (int i = 0; i < 10; i++) {
-            final int taskId = i;
-            
-            executor.submit(() -> {
-                String threadName = Thread.currentThread().getName();
-                System.out.println("[" + threadName + "] Début tâche " + taskId);
-                
-                try {
-                    // Simulation travail bloquant
-                    Thread.sleep(1000);
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                }
-                
-                System.out.println("[" + threadName + "] Fin tâche " + taskId);
-            });
-        }
-        
-        executor.shutdown();
-        executor.awaitTermination(30, TimeUnit.SECONDS);
-        
-        System.out.println("\n=== Toutes les tâches terminées ===");
-    }
+
+	public static void main(String[] args) throws InterruptedException {
+		// Créer un pool de threads avec 4 threads
+		ExecutorService executor = Executors.newFixedThreadPool(4);
+
+		System.out.println("=== Pool créé avec 4 threads ===\n");
+
+		for (int i = 0; i < 10; i++) {
+			final int taskId = i;
+
+			executor.submit(() -> {
+				String threadName = Thread.currentThread().getName();
+				System.out.println("[" + threadName + "] Début tâche " + taskId);
+
+				try {
+					Thread.sleep(1000);
+				} catch (InterruptedException e) {
+					Thread.currentThread().interrupt();
+				}
+
+				System.out.println("[" + threadName + "] Fin tâche " + taskId);
+			});
+		}
+
+		executor.shutdown();
+		executor.awaitTermination(30, TimeUnit.SECONDS);
+
+		System.out.println("\n=== Toutes les tâches terminées ===");
+	}
+
 }
 
-/* Output typique:
-
-=== Pool créé avec 4 threads ===
-
-[pool-1-thread-1] Début tâche 0
-[pool-1-thread-2] Début tâche 1
-[pool-1-thread-3] Début tâche 2
-[pool-1-thread-4] Début tâche 3
-[pool-1-thread-1] Fin tâche 0
-[pool-1-thread-1] Début tâche 4    ← Thread réutilisé!
-[pool-1-thread-2] Fin tâche 1
-[pool-1-thread-2] Début tâche 5    ← Thread réutilisé!
-...
+/* Output typique :
 
 Observation:
 - Seulement 4 threads OS créés
@@ -841,6 +818,25 @@ public class ThreadPoolTypes {
 }
 ```
 
+Focus sur le Work-Stealing Pool :
+    Un work-stealing thread pool est un type particulier d'ExecutorService créé via Executors.newWorkStealingPool(). 
+    Il utilise l'algorithme ForkJoinPool qui optimise l'exécution de tâches parallèles.
+    Principe :
+    Chaque thread possède sa propre file d'attente locale (deque) pour stocker ses tâches.
+    Quand un thread termine ses tâches, il peut "voler" (steal) des tâches dans la file d'un autre thread occupé.
+    Par défaut, le pool crée autant de threads que de cœurs CPU disponibles (Runtime.getRuntime().availableProcessors()).
+    Algorithme work-stealing :
+    Un thread prend ses tâches par le haut de sa propre file (LIFO : Last In, First Out).
+    Quand il vole une tâche d'un autre thread, il la prend par le bas de la file adverse (FIFO : First In, First Out).
+    Cela réduit les contentions (conflits d'accès) entre threads.
+        Avantages :
+        Équilibrage automatique : les threads oisifs aident les threads surchargés.
+        Optimisé pour le parallélisme : idéal pour des tâches récursives ou divisibles (type divide-and-conquer).
+    Pas de file globale : réduit les points de contention centralisés.
+    Cas d'usage :
+    Traitement parallèle de grandes collections (parallelStream()).
+    Algorithmes récursifs (tri fusion, calculs matriciels).
+    Tâches pouvant se subdiviser dynamiquement.
 ---
 
 ## 2.7 Synchronisation et Monitors
@@ -848,103 +844,70 @@ public class ThreadPoolTypes {
 ### Le problème de la concurrence
 
 ```java
-public class RaceConditionExample {
-    
-    private static int counter = 0;
-    
-    public static void main(String[] args) throws InterruptedException {
-        
-        Thread[] threads = new Thread[100];
-        
-        // 100 threads incrémentent counter 1000 fois chacun
-        for (int i = 0; i < 100; i++) {
-            threads[i] = new Thread(() -> {
-                for (int j = 0; j < 1000; j++) {
-                    counter++; // ⚠️ PAS ATOMIQUE !
-                }
-            });
-            threads[i].start();
-        }
-        
-        for (Thread t : threads) {
-            t.join();
-        }
-        
-        System.out.println("Valeur attendue: 100000");
-        System.out.println("Valeur obtenue: " + counter);
-        System.out.println("Pertes: " + (100000 - counter));
-    }
+public class ConcurrencyProblematic {
+
+	private static int counter = 0;
+
+	static void main() throws InterruptedException {
+		Thread[] threads = new Thread[100];
+
+		for (int i = 0; i < 100; i++) {
+			threads[i] = new Thread(() -> {
+				for (int j = 0; j < 10000; j++) {
+					counter++;
+				}
+			});
+			threads[i].start();
+		}
+
+		for (Thread t : threads) {
+			t.join();
+		}
+
+		System.out.println("Valeur attendue: 1000000");
+		System.out.println("Valeur obtenue: " + counter);
+		System.out.println("Pertes: " + (1000000 - counter));
+	}
 }
 
-/* Output typique:
-
-Valeur attendue: 100000
-Valeur obtenue: 87234
-Pertes: 12766
-
-Pourquoi? counter++ n'est PAS atomique!
-
-En bytecode:
-1. GETFIELD counter      // Lire valeur
-2. ICONST_1              // Push 1
-3. IADD                  // Additionner
-4. PUTFIELD counter      // Écrire résultat
-
-Si 2 threads exécutent simultanément:
-Thread A: Lit 42
-Thread B: Lit 42
-Thread A: Calcule 43
-Thread B: Calcule 43
-Thread A: Écrit 43
-Thread B: Écrit 43  ← Une incrémentation perdue!
-*/
 ```
 
 ### Solution : synchronized
 
 ```java
 public class SynchronizedExample {
-    
-    private static int counter = 0;
-    private static final Object lock = new Object();
-    
-    public static void main(String[] args) throws InterruptedException {
-        
-        Thread[] threads = new Thread[100];
-        
-        for (int i = 0; i < 100; i++) {
-            threads[i] = new Thread(() -> {
-                for (int j = 0; j < 1000; j++) {
-                    // Bloc synchronized : un seul thread à la fois
-                    synchronized (lock) {
-                        counter++;
-                    }
-                }
-            });
-            threads[i].start();
-        }
-        
-        for (Thread t : threads) {
-            t.join();
-        }
-        
-        System.out.println("Valeur attendue: 100000");
-        System.out.println("Valeur obtenue: " + counter);
-    }
+
+	private static int counter = 0;
+	private static final Object lock = new Object();
+
+	static void main() throws InterruptedException {
+
+		Thread[] threads = new Thread[100];
+
+		for (int i = 0; i < 100; i++) {
+			threads[i] = new Thread(() -> {
+				for (int j = 0; j < 1000; j++) {
+					synchronized (lock) {
+						counter++;
+					}
+				}
+			});
+			threads[i].start();
+		}
+
+		for (Thread t : threads) {
+			t.join();
+		}
+
+		System.out.println("Valeur attendue: 100000");
+		System.out.println("Valeur obtenue: " + counter);
+	}
 }
 
-/* Output:
-
-Valeur attendue: 100000
-Valeur obtenue: 100000  ← Correct!
-
-Comment ça marche:
-- Chaque objet Java a un "monitor" (verrou intrinsèque)
-- synchronized(obj) acquiert le monitor de obj
-- Un seul thread peut détenir le monitor à la fois
-- Les autres threads sont BLOQUÉS (état BLOCKED)
-*/
 ```
+
+Synchronization via synchronized garantit que seul un thread à la fois peut exécuter le bloc critique, mais cela peut entraîner de la contention et des threads en état BLOCKED
+si plusieurs threads tentent d'accéder simultanément au même verrou.
 
 ### Points clés à retenir
 

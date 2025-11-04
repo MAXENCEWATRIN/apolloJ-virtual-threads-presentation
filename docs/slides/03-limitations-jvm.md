@@ -36,111 +36,176 @@ Problème:
 
 ### Démonstration avec un serveur HTTP simple
 
+Ici, on va créer un serveur HTTP simple en Java qui utilise un ThreadPoolExecutor avec une taille de pool limitée et une queue limitée. 
+Le serveur simule un traitement bloquant (par exemple, une opération I/O) en dormant pendant 5 secondes pour chaque requête. 
+En parallèle on va jouer un petit script pour envoyer 30 requêtes simultanées et observer le comportement du serveur.
+
 ```java
-import com.sun.net.httpserver.*;
-import java.io.*;
-import java.net.*;
-import java.util.concurrent.*;
-import java.util.concurrent.atomic.AtomicInteger;
+import com.sun.net.httpserver.HttpServer;
 
 public class ThreadPerRequestDemo {
-    
-    private static final AtomicInteger activeRequests = new AtomicInteger(0);
-    private static final AtomicInteger queuedRequests = new AtomicInteger(0);
-    
-    public static void main(String[] args) throws IOException {
-        
-        HttpServer server = HttpServer.create(new InetSocketAddress(8080), 0);
-        
-        // Thread pool de 10 threads seulement
-        // Donc 11 tâches servlet impossible  
-        ThreadPoolExecutor executor = new ThreadPoolExecutor(
-            10,  // Core pool size
-            10,  // Max pool size
-            60L, TimeUnit.SECONDS,
-            new ArrayBlockingQueue<>(50)  // Queue de 50 max
-        );
-        
-        server.setExecutor(executor);
-        
-        // Handler qui simule un I/O bloquant classique dans un controller (SpringRestController par exemple)
-        server.createContext("/api/data", exchange -> {
-            int active = activeRequests.incrementAndGet();
-            int queued = executor.getQueue().size();
-            
-            String threadName = Thread.currentThread().getName();
-            
-            System.out.printf("[%s] Requête reçue (Active: %d, Queue: %d)%n",
-                threadName, active, queued);
-            
-            try {
-                // Simulation I/O bloquant (DB, API externe, etc.)
-                Thread.sleep(5000);
-                
-                String response = String.format(
-                    "Traité par %s (Active: %d, Queue: %d)",
-                    threadName, active, queued
-                );
-                
-                exchange.sendResponseHeaders(200, response.length());
-                OutputStream os = exchange.getResponseBody();
-                os.write(response.getBytes());
-                os.close();
-                
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-            } finally {
-                activeRequests.decrementAndGet();
-            }
-        });
-        
-        // Endpoint de monitoring pour visualiser nos magouilles
-        server.createContext("/stats", exchange -> {
-            String stats = String.format(
-                "Active: %d, Queue: %d, Pool size: %d",
-                executor.getActiveCount(),
-                executor.getQueue().size(),
-                executor.getPoolSize()
-            );
-            
-            exchange.sendResponseHeaders(200, stats.length());
-            OutputStream os = exchange.getResponseBody();
-            os.write(stats.getBytes());
-            os.close();
-        });
-        
-        server.start();
-        System.out.println("Serveur démarré sur port local");
-        System.out.println("Thread pool: 10 threads max");
-        System.out.println("Queue: 50 requêtes max");
-        System.out.println("\ à tester sur http://localhost:8080/api/data GET");
-        System.out.println("\ à visualiser sur http://localhost:8080/stats GET");
-    }
+
+	private static final AtomicInteger activeRequests = new AtomicInteger(0);
+	private static final AtomicInteger rejectedRequests = new AtomicInteger(0);
+
+	public static void main(String[] args) throws IOException {
+
+		HttpServer server = HttpServer.create(new InetSocketAddress(8080), 0);
+
+		ThreadPoolExecutor executor = new ThreadPoolExecutor(
+			5,
+			5,
+			60L, TimeUnit.SECONDS,
+			new ArrayBlockingQueue<>(10)
+		);
+
+		executor.setRejectedExecutionHandler((r, exec) -> {
+			int rejected = rejectedRequests.incrementAndGet();
+			System.err.printf("❌ REJETÉ ! Total rejections: %d%n", rejected);
+			throw new RejectedExecutionException("Queue pleine");
+		});
+
+		server.setExecutor(executor);
+
+		// Handler qui simule un I/O bloquant
+		server.createContext("/api/data", exchange -> {
+			int active = activeRequests.incrementAndGet();
+			int queued = executor.getQueue().size();
+			String threadName = Thread.currentThread().getName();
+
+			System.out.printf("[%s] Requête reçue (Active: %d, Queue: %d)%n",
+				threadName, active, queued);
+
+			try {
+				Thread.sleep(5000);
+
+				String response = String.format(
+					"Traité par %s (Active: %d, Queue: %d)",
+					threadName, active, queued
+				);
+
+				exchange.sendResponseHeaders(200, response.length());
+				OutputStream os = exchange.getResponseBody();
+				os.write(response.getBytes());
+				os.close();
+
+			} catch (InterruptedException e) {
+				Thread.currentThread().interrupt();
+			} finally {
+				activeRequests.decrementAndGet();
+			}
+		});
+
+		// Endpoint de monitoring amélioré
+		server.createContext("/stats", exchange -> {
+			String stats = String.format(
+				"Active: %d, Queue: %d, Pool size: %d, Rejected: %d",
+				executor.getActiveCount(),
+				executor.getQueue().size(),
+				executor.getPoolSize(),
+				rejectedRequests.get()
+			);
+
+			exchange.sendResponseHeaders(200, stats.length());
+			OutputStream os = exchange.getResponseBody();
+			os.write(stats.getBytes());
+			os.close();
+		});
+
+		server.start();
+		System.out.println("🚀 Serveur démarré sur http://localhost:8080");
+		System.out.println("   Thread pool: 5 threads");
+		System.out.println("   Queue: 10 requêtes max");
+		System.out.println("   Capacité totale: 15 requêtes simultanées");
+		System.out.println();
+		System.out.println("📍 Endpoints:");
+		System.out.println("   GET http://localhost:8080/api/data");
+		System.out.println("   GET http://localhost:8080/stats");
+	}
 }
-
-/* Test de charge :
-
-# Envoyer 20 requêtes simultanées de n'importe quel moyen
-//TODO : fournir un petit script
-for i in {1..20}; do
-  curl http://localhost:8080/api/data &
-done
-
-Output serveur:
-[pool-1-thread-1] Requête reçue (Active: 1, Queue: 0)
-[pool-1-thread-2] Requête reçue (Active: 2, Queue: 0)
-...
-[pool-1-thread-10] Requête reçue (Active: 10, Queue: 0)
-[pool-1-thread-8] Requête reçue (Active: 10, Queue: 9)  ← En queue!
-[pool-1-thread-3] Requête reçue (Active: 10, Queue: 8)
-
-Observation:
-• Les 10 premiers threads traitent immédiatement
-• Les 10 suivants attendent dans la queue
-• Latence requête 11-20: +5 secondes (temps d'attente)
-• Si > 60 requêtes: RejectedExecutionException! (60 = 50 queue + 10 traitées)
-*/
 ```
+
+```java
+
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.time.Duration;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
+
+public class BadGuyWithLotOfRequestToDo {
+
+	private static final String SERVER_URL = "http://localhost:8080/api/data";
+	private static final int TOTAL_REQUESTS = 20; // 15 capacités + 5 rejets
+
+	private static final AtomicInteger successCount = new AtomicInteger(0);
+	private static final AtomicInteger errorCount = new AtomicInteger(0);
+
+	public static void main(String[] args) throws InterruptedException {
+		HttpClient httpClient = HttpClient.newBuilder()
+			.connectTimeout(Duration.ofSeconds(10))
+			.build();
+
+		ExecutorService executor = Executors.newFixedThreadPool(20);
+
+		System.out.println("🚀 Envoi de " + TOTAL_REQUESTS + " requêtes simultanées...");
+		System.out.println("⏱️  Capacité serveur: 5 threads + 10 queue = 15 max");
+		System.out.println();
+
+		long startTime = System.currentTimeMillis();
+
+		for (int i = 1; i <= TOTAL_REQUESTS; i++) {
+			final int requestId = i;
+			executor.submit(() -> {
+				try {
+					HttpRequest request = HttpRequest.newBuilder()
+						.uri(URI.create(SERVER_URL))
+						.GET()
+						.build();
+
+					HttpResponse<String> response = httpClient.send(
+						request,
+						HttpResponse.BodyHandlers.ofString()
+					);
+
+					if (response.statusCode() == 200) {
+						successCount.incrementAndGet();
+						System.out.printf("✅ Requête #%d OK (Thread: %s)%n",
+							requestId, Thread.currentThread().getName());
+					}
+				} catch (Exception e) {
+					errorCount.incrementAndGet();
+					System.err.printf("❌ Requête #%d ERREUR: %s%n",
+						requestId, e.getMessage());
+				}
+			});
+		}
+
+		executor.shutdown();
+		executor.awaitTermination(1, TimeUnit.MINUTES);
+
+		long duration = System.currentTimeMillis() - startTime;
+
+		System.out.println("\n📊 Résultats:");
+		System.out.println("   Succès: " + successCount.get());
+		System.out.println("   Erreurs: " + errorCount.get());
+		System.out.println("   Durée: " + duration + " ms");
+
+		if (errorCount.get() > 0) {
+			System.out.println("\n⚠️  Serveur saturé ! Des requêtes ont été rejetées.");
+		}
+	}
+
+}
+```
+
+Cette exemple démontre clairement les limitations d'une architecture Thread-per-Request classique :
+ - Le serveur ne peut gérer qu'un nombre limité de requêtes simultanées (15 dans cet exemple, volontairement bas).
+ - Lorsque la charge dépasse cette limite, les requêtes supplémentaires sont rejetées.
 ---
 
 ## 3.2 Le coût du Context Switching intensif (POUR APPROFONDIR)
@@ -153,243 +218,93 @@ import java.util.List;
 import java.util.ArrayList;
 
 public class ContextSwitchingBenchmark {
-    
-    public static void main(String[] args) throws InterruptedException {
-        
-        System.out.println("=== Benchmark Context Switching ===\n");
-        
-        // Test avec différents nombres de threads
-        int[] threadCounts = {10, 50, 100, 500, 1000, 5000};
-        
-        for (int numThreads : threadCounts) {
-            benchmarkWithThreads(numThreads);
-        }
-    }
-    
-    private static void benchmarkWithThreads(int numThreads) 
-            throws InterruptedException {
-        
-        CountDownLatch startLatch = new CountDownLatch(1);
-        CountDownLatch doneLatch = new CountDownLatch(numThreads);
-        
-        // Compteur d'incrémentations par thread
-        int incrementsPerThread = 100_000;
-        
-        List<Thread> threads = new ArrayList<>();
-        
-        // Créer les threads
-        for (int i = 0; i < numThreads; i++) {
-            Thread t = new Thread(() -> {
-                try {
-                    startLatch.await(); // Attendre le signal de départ
-                    
-                    // Travail CPU-bound léger
-                    long sum = 0;
-                    for (int j = 0; j < incrementsPerThread; j++) {
-                        sum += j;
-                    }
-                    
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                } finally {
-                    doneLatch.countDown();
-                }
-            });
-            t.start();
-            threads.add(t);
-        }
-        
-        // Laisser les threads se préparer
-        Thread.sleep(100);
-        
-        // Démarrer tous les threads en même temps
-        long startTime = System.nanoTime();
-        startLatch.countDown();
-        
-        // Attendre que tous terminent
-        doneLatch.await();
-        long duration = System.nanoTime() - startTime;
-        
-        // Calculs
-        long totalOps = (long) numThreads * incrementsPerThread;
-        double durationMs = duration / 1_000_000.0;
-        double opsPerSec = totalOps / (duration / 1_000_000_000.0);
-        
-        System.out.printf("Threads: %5d | Durée: %7.0f ms | " +
-                         "Ops/sec: %12.0f | Overhead: %s%n",
-            numThreads, durationMs, opsPerSec, 
-            getOverheadIndicator(numThreads)
-        );
-        
-        // Nettoyer
-        for (Thread t : threads) {
-            t.join();
-        }
-    }
-    
-    private static String getOverheadIndicator(int numThreads) {
-        int cores = Runtime.getRuntime().availableProcessors();
-        if (numThreads <= cores) return "✓ Optimal";
-        if (numThreads <= cores * 2) return "⚠ Acceptable";
-        if (numThreads <= cores * 10) return "⚠⚠ Élevé";
-        return "❌ Critique";
-    }
+
+	public static void main(String[] args) throws InterruptedException {
+
+		System.out.println("=== Benchmark Context Switching ===\n");
+
+		//On essaye de voir le temps de latence de traitement sur différents jalons
+		int[] threadCounts = {10, 50, 100, 500, 1000, 5000, 10_000};
+
+		System.out.println("Durée : Temps total (en millisecondes) pour que tous les threads terminent leur travail (calculs simple dans la boucle).");
+		System.out.println("Opértion/sec : Nombre total d’opérations (incréments dans toutes les boucles) divisé par la durée du test en secondes. mesure finalement le débit du système");
+		System.out.println("Overhead : Indicateur de surcharge basé sur le nombre de threads par rapport aux cœurs disponibles.");
+
+		for (int numThreads : threadCounts) {
+			benchmarkWithThreads(numThreads);
+		}
+
+	}
+
+	private static void benchmarkWithThreads(int numThreads)
+		throws InterruptedException {
+
+		CountDownLatch startLatch = new CountDownLatch(1);
+		CountDownLatch doneLatch = new CountDownLatch(numThreads);
+
+		int incrementsPerThread = 100_000;
+
+		List<Thread> threads = new ArrayList<>();
+
+		// On commence par créer les threads
+		for (int i = 0; i < numThreads; i++) {
+			Thread t = new Thread(() -> {
+				try {
+					startLatch.await();
+
+					//Juste un calcul pour simuler du travail
+					long sum = 0;
+					for (int j = 0; j < incrementsPerThread; j++) {
+						sum += j;
+					}
+
+				} catch (InterruptedException e) {
+					Thread.currentThread().interrupt();
+				} finally {
+					doneLatch.countDown();
+				}
+			});
+			t.start();
+			threads.add(t);
+		}
+
+		Thread.sleep(100);
+
+		// Ici on démarre tous les threads
+		long startTime = System.nanoTime();
+		startLatch.countDown();
+
+		doneLatch.await();
+		long duration = System.nanoTime() - startTime;
+
+		//On essaye de calculer un débit d'opérations
+		long totalOperations = (long) numThreads * incrementsPerThread;
+		double durationMs = duration / 1_000_000.0;
+		double opsPerSec = totalOperations / (duration / 1_000_000_000.0);
+
+		System.out.printf("Threads: %5d | Durée: %7.0f ms | " +
+				"Opérations/sec: %12.0f | Overhead: %s%n",
+			numThreads, durationMs, opsPerSec,
+			getOverheadIndicator(numThreads)
+		);
+
+		// finito pipo ricardo
+		for (Thread t : threads) {
+			t.join();
+		}
+	}
+
+	private static String getOverheadIndicator(int numThreads) {
+		int cores = Runtime.getRuntime().availableProcessors();
+		if (numThreads <= cores) return "✓ Optimal";
+		if (numThreads <= cores * 2) return "⚠ Acceptable";
+		if (numThreads <= cores * 10) return "⚠⚠ Élevé";
+		return "❌ Critique";
+	}
 }
 
-/* Résultats typiques (machine 8 cores):
-
-=== Benchmark Context Switching ===
-
-Threads:    10 | Durée:     125 ms | Ops/sec:  8000000000 | Overhead: ✓ Optimal
-Threads:    50 | Durée:     156 ms | Ops/sec:  6410256410 | Overhead: ⚠ Acceptable
-Threads:   100 | Durée:     234 ms | Ops/sec:  4273504274 | Overhead: ⚠⚠ Élevé
-Threads:   500 | Durée:    1250 ms | Ops/sec:   800000000 | Overhead: ❌ Critique
-Threads:  1000 | Durée:    2890 ms | Ops/sec:   346020761 | Overhead: ❌ Critique
-Threads:  5000 | Durée:   18500 ms | Ops/sec:    54054054 | Overhead: ❌ Critique
-
-Observations:
-• 10 threads (≈ nb cores): Performance optimale
-• 100 threads: Performance divisée par 2 (context switching)
-• 1000 threads: Performance divisée par 7 !
-• 5000 threads: Performance divisée par 25 !!
-
-Le CPU passe plus de temps à switcher qu'à travailler!
-*/
 ```
-
-### Visualisation du CPU usage 
-
-```
-CPU Utilization avec 10 threads (optimal):
-Core 1: ████████████████████████████████  95%
-Core 2: ████████████████████████████████  95%
-Core 3: ████████████████████████████████  95%
-Core 4: ████████████████████████████████  95%
-Context switching: ~5% (négligeable)
-
-CPU Utilization avec 1000 threads (critique):
-Core 1: ████░░░░░░░░░░░░░░░░░░░░░░░░░░░  30%
-Core 2: ████░░░░░░░░░░░░░░░░░░░░░░░░░░░  30%
-Core 3: ████░░░░░░░░░░░░░░░░░░░░░░░░░░░  30%
-Core 4: ████░░░░░░░░░░░░░░░░░░░░░░░░░░░  30%
-Context switching: ~70% (catastrophique!)
-
-Légende:
-█ = Travail utile
-░ = Context switching / scheduling overhead
-```
-
 ---
-
-## 3.3 Limitation mémoire : Le mur des 10,000 threads
-
-### Calcul théorique
-
-```
-Calcul simple:
-
-Machine: 16 GB RAM
-
-Mémoire par thread:
-• Stack size: 1-2 MB (configurable avec -Xss)
-• TCB (Thread Control Block): ~1 KB
-• Métadonnées JVM: ~1 KB
-• Total: ~2 MB par thread
-
-Nombre max théorique:
-• 16 GB / 2 MB = 8,000 threads
-
-Mais en réalité:
-• JVM Heap: 4-8 GB
-• Code (classes): ~500 MB
-• Metaspace: ~500 MB
-• OS kernel: ~1 GB
-• Buffers réseau: ~500 MB
-• Direct memory: ~1 GB
-
-Mémoire disponible pour threads: ~8 GB
-• 8 GB / 2 MB = 4,000 threads max pratique
-
-Au-delà: OutOfMemoryError ou thrashing
-```
-
-### Démonstration pratique
-
-```java
-import java.util.ArrayList;
-import java.util.List;
-
-public class ThreadMemoryLimit {
-    
-    public static void main(String[] args) {
-        
-        List<Thread> threads = new ArrayList<>();
-        int count = 0;
-        
-        System.out.println("Création de threads jusqu'à l'erreur...");
-        System.out.println("Stack size: " + 
-            Thread.currentThread().getStackSize() / 1024 + " KB");
-        
-        Runtime runtime = Runtime.getRuntime();
-        
-        try {
-            while (true) {
-                Thread t = new Thread(() -> {
-                    try {
-                        // On endort le Thread nouvellement créé indéfiniment
-                        Thread.sleep(Long.MAX_VALUE);
-                    } catch (InterruptedException e) {
-                        Thread.currentThread().interrupt();
-                    }
-                });
-                
-                t.start();
-                threads.add(t);
-                count++;
-                
-                // Afficher tous les 1000 threads
-                if (count % 1000 == 0) {
-                    long usedMemory = runtime.totalMemory() - runtime.freeMemory();
-                    System.out.printf("Threads créés: %5d | Mémoire: %5d MB%n",
-                        count, usedMemory / 1024 / 1024);
-                }
-            }
-        } catch (OutOfMemoryError e) {
-            System.out.println("\n OutOfMemoryError atteint!");
-            System.out.println("Nombre max de threads: " + count);
-            
-            long usedMemory = runtime.totalMemory() - runtime.freeMemory();
-            System.out.println("Mémoire utilisée: " + usedMemory / 1024 / 1024 + " MB");
-            System.out.println("Mémoire par thread: " + (usedMemory / count / 1024) + " KB");
-            
-        } finally {
-            System.out.println("\nInterruption des threads, démo terminée...");
-            threads.forEach(Thread::interrupt);
-        }
-    }
-}
-
-/* Output typique (machine 16 GB, JVM avec -Xmx8g):
-
-Création de threads jusqu'à l'erreur...
-Stack size: 1024 KB
-Threads créés:  1000 | Mémoire:  2100 MB
-Threads créés:  2000 | Mémoire:  4200 MB
-Threads créés:  3000 | Mémoire:  6300 MB
-Threads créés:  4000 | Mémoire:  8400 MB
-Threads créés:  5000 | Mémoire: 10500 MB
-
-❌ OutOfMemoryError atteint!
-Nombre max de threads: 5247
-Mémoire utilisée: 11000 MB
-Mémoire par thread: 2145 KB
-
-Conclusion:
-• Machine 16 GB → Max ~5000 threads
-• Au-delà: Impossible d'allouer plus de mémoire
-• Même si CPU idle à 90%!
-*/
-```
 
 ### Impact sur les architectures modernes
 
@@ -424,7 +339,7 @@ Solution actuelle (coûteuse):
 
 ---
 
-## 3.4 I/O Bloquant : Le grand gaspillage (Pour approfondir)
+## 3.3 I/O Bloquant : Le grand gaspillage (Pour approfondir)
 
 ### Analyse d'une application réelle
 
@@ -600,9 +515,9 @@ Analyse d'efficacité:
 
 ---
 
-## 3.5 Cas d'usage critiques (Pour approfondir)
+## 3.4 Cas d'usage critiques (Pour approfondir)
 
-### 3.5.1 WebSocket et Connexions longues
+### 3.4.1 WebSocket et Connexions longues
 
 ```java
 import javax.websocket.*;
@@ -665,7 +580,7 @@ Coût: Infrastructure additionnelle, complexité
 */
 ```
 
-### 3.5.2 Traitement Batch massivement parallèle
+### 3.4.2 Traitement Batch massivement parallèle (Pour approfondir)
 
 ```java
 import java.util.List;
@@ -784,7 +699,7 @@ Avec 1 million de records:
 */
 ```
 
-### 3.5.3 Microservices avec appels en cascade (Pour approfondir)
+### 3.4.3 Microservices avec appels en cascade (Pour approfondir)
 
 ```java
 import java.net.http.*;
@@ -904,9 +819,9 @@ Si Service C est lent (spike de latence):
 
 ---
 
-## 3.6 Les "Solutions" actuelles et leurs limites
+## 3.5 Les "Solutions" actuelles et leurs limites
 
-### 3.6.1 Augmenter le nombre de threads
+### 3.5.1 Augmenter le nombre de threads
 
 ```java
 // Configuration Tomcat typique
@@ -926,7 +841,7 @@ Résultat:
 */
 ```
 
-### 3.6.2 Programmation Réactive (WebFlux)
+### 3.5.2 Programmation Réactive (WebFlux)
 
 ```java
 // Avec Reactor (WebFlux)
@@ -964,7 +879,7 @@ Inconvénients:
 */
 ```
 
-### 3.6.3 Async/CompletableFuture
+### 3.5.3 Async/CompletableFuture
 
 ```java
 // Avec CompletableFuture
@@ -1014,7 +929,7 @@ sendResponse(result);
 */
 ```
 
-### 3.6.4 Horizontal Scaling (plus de serveurs)
+### 3.5.4 Horizontal Scaling (plus de serveurs)
 
 ```
 Solution actuelle en production:
@@ -1053,7 +968,7 @@ Alternative avec Virtual Threads:
 
 ---
 
-## 3.7 Tableau récapitulatif des limitations
+## 3.6 Tableau récapitulatif des limitations
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
@@ -1074,10 +989,11 @@ Alternative avec Virtual Threads:
 │                     │ • Thread pools requis                     │
 ├─────────────────────┼───────────────────────────────────────────┤
 │ Blocking I/O        │ • 70-95% du temps en attente              │
-│                     │ • Thread inutilisé mais consomme ressources│
+│                     │ • Thread inutilisé mais                   │
+│                     │      consomme des ressources              │            
 │                     │ • Throughput limité                       │
 ├─────────────────────┼───────────────────────────────────────────┤
-│ Scalabilité         │ • Thread-per-request → max connections   │
+│ Scalabilité         │ • Thread-per-request → max connections    │
 │                     │ • WebSocket → thread pool saturation      │
 │                     │ • Batch processing limité                 │
 ├─────────────────────┼───────────────────────────────────────────┤
@@ -1127,7 +1043,7 @@ Légende:
 ---
 
 
-## 3.8 Métriques réelles : Avant LTS21/25 et VT
+## 3.7 Métriques réelles : Avant LTS21/25 et VT
 
 ### Application E-commerce typique
 
@@ -1196,7 +1112,7 @@ Avec Virtual Threads:
 
 ---
 
-## 3.9 Résumé : Le mur des Platform Threads
+## 3.8 Résumé : Le mur des Platform Threads
 
 ### Les chiffres qui font mal
 
