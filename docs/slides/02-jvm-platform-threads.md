@@ -199,7 +199,7 @@ thread.start();
 ```
 
 ### Différence entre un Thread I/O wait et BLOCKED
-
+```
 Ces deux éléments vont souvent être rencontrés dans le reste de la présentation, mais ne sont pas forcément clair pour tous.
 
 État JVM: Thread.State.BLOCKED
@@ -675,180 +675,7 @@ Inconvénients:
 
 ---
 
-## 2.6 La gestion des threads par la JVM
-
-### Thread Lifecycle Management
-
-```java
-public class ThreadLifecycleDemo {
-    
-    public static void main(String[] args) throws InterruptedException {
-        
-        Thread thread = new Thread(() -> {
-            System.out.println("Thread démarré: " + Thread.currentThread().getName());
-            
-            try {
-                // Simulation travail
-                for (int i = 0; i < 5; i++) {
-                    System.out.println("Travail " + i);
-                    Thread.sleep(100);
-                }
-            } catch (InterruptedException e) {
-                System.out.println("Thread interrompu!");
-                return;
-            }
-            
-            System.out.println("Thread terminé");
-        }, "Worker-Thread");
-        
-        // État NEW
-        System.out.println("État: " + thread.getState()); // NEW
-        System.out.println("Vivant? " + thread.isAlive()); // false
-        
-        // Démarrage
-        thread.start();
-        
-        // État RUNNABLE (en cours d'exécution ou prêt)
-        Thread.sleep(10);
-        System.out.println("État: " + thread.getState()); // RUNNABLE
-        System.out.println("Vivant? " + thread.isAlive()); // true
-        
-        // État TIMED_WAITING (pendant Thread.sleep)
-        Thread.sleep(150);
-        System.out.println("État: " + thread.getState()); // TIMED_WAITING
-        
-        // Attendre la fin
-        thread.join();
-        
-        // État TERMINATED
-        System.out.println("État: " + thread.getState()); // TERMINATED
-        System.out.println("Vivant? " + thread.isAlive()); // false
-    }
-}
-```
-
-### États détaillés d'un thread
-
-```
-┌─────────────────────────────────────────────────────┐
-│                  Thread States                      │
-├─────────────────────────────────────────────────────┤
-│                                                     │
-│  NEW (thread créé, pas démarré)                    │
-│      │                                              │
-│      │ start()                                      │
-│      ▼                                              │
-│  RUNNABLE (prêt ou en exécution)                   │
-│      │                                              │
-│      ├─► En execution sur CPU                      │
-│      │   (running)                                  │
-│      │                                              │
-│      ├─► En attente CPU                            │
-│      │   (ready - dans run queue)                  │
-│      │                                              │
-│      │ sleep(n) / wait(timeout) / join(timeout)    │
-│      ▼                                              │
-│  TIMED_WAITING (attente avec timeout)              │
-│      │                                              │
-│      │ timeout expiré                               │
-│      ▼                                              │
-│  RUNNABLE                                           │
-│      │                                              │
-│      │ wait() / join()                              │
-│      ▼                                              │
-│  WAITING (attente indéfinie)                       │
-│      │                                              │
-│      │ notify() / notifyAll() / interrupt()        │
-│      ▼                                              │
-│  RUNNABLE                                           │
-│      │                                              │
-│      │ synchronized block / lock                    │
-│      ▼                                              │
-│  BLOCKED (attente d'un lock)                       │
-│      │                                              │
-│      │ lock obtenu                                  │
-│      ▼                                              │
-│  RUNNABLE                                           │
-│      │                                              │
-│      │ fin du run()                                 │
-│      ▼                                              │
-│  TERMINATED (thread terminé)                       │
-│                                                     │
-└─────────────────────────────────────────────────────┘
-```
-
-### Exemple complet des états
-
-```java
-public class ThreadStatesExample {
-    
-    private static final Object lock = new Object();
-    private static volatile boolean flag = false;
-    
-    public static void main(String[] args) throws InterruptedException {
-        
-        // Thread qui va passer par tous les états
-        Thread thread = new Thread(() -> {
-            try {
-                // État RUNNABLE (en exécution)
-                System.out.println("Thread en cours d'exécution");
-                
-                // État TIMED_WAITING
-                Thread.sleep(500);
-                
-                // État WAITING
-                synchronized (lock) {
-                    while (!flag) {
-                        lock.wait();
-                    }
-                }
-                
-                // État BLOCKED (attente du lock)
-                synchronized (lock) {
-                    System.out.println("Lock obtenu");
-                }
-                
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-            }
-        }, "StateDemo");
-        
-        // État NEW
-        System.out.println("1. État NEW: " + thread.getState());
-        
-        thread.start();
-        Thread.sleep(50);
-        
-        // État RUNNABLE
-        System.out.println("2. État RUNNABLE: " + thread.getState());
-        
-        Thread.sleep(200);
-        
-        // État TIMED_WAITING
-        System.out.println("3. État TIMED_WAITING: " + thread.getState());
-        
-        Thread.sleep(400);
-        
-        // État WAITING
-        System.out.println("4. État WAITING: " + thread.getState());
-        
-        // Débloquer le thread
-        synchronized (lock) {
-            flag = true;
-            lock.notify();
-        }
-        
-        thread.join();
-        
-        // État TERMINATED
-        System.out.println("5. État TERMINATED: " + thread.getState());
-    }
-}
-```
-
----
-
-## 2.7 Thread Pools : La gestion collective
+## 2.6 Thread Pools : La gestion collective
 
 ### ExecutorService et Thread Pools
 
@@ -1015,7 +842,7 @@ public class ThreadPoolTypes {
 
 ---
 
-## 2.8 Synchronisation et Monitors
+## 2.7 Synchronisation et Monitors
 
 ### Le problème de la concurrence
 
