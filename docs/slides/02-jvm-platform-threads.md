@@ -8,7 +8,27 @@
 
 ### Le mapping 1:1
 
-Depuis Java 1.2, Java utilise un modèle **1:1** : chaque thread Java correspond à **exactement un thread du système d'exploitation**.
+### Le mapping 1:1
+
+**Depuis Java 1.2 (1998)**, Java utilise un modèle **1:1** appelé "native threads" : 
+chaque thread Java (`java.lang.Thread`) correspond à **exactement un thread du 
+système d'exploitation** (pthread sur Linux/Unix, thread Windows).
+
+**Historique très rapide :**
+- **Java 1.0-1.1** : "Green Threads" (threads légers gérés par la JVM, modèle M:N)
+- **Java 1.2+** : Passage au modèle 1:1 pour de meilleures performances
+- **Java 21** : Introduction des Virtual Threads (retour à un modèle M:N moderne)
+
+Ce choix de 1:1 en 1998 était justifié à l'époque par :
+
+- ✅ Meilleure exploitation des CPU multi-cœurs
+- ✅ Intégration avec les outils système (debuggers, profilers)
+- ❌ Mais limitation du nombre de threads (~5,000 max)
+
+
+Donc en somme, java 1.2 et le modèle 1 vers 1 répondait à une logique de l'époque. 
+Les CPU commençaient à gagner en coeurs et permettaient donc une meilleure performance.
+Aujourd'hui, les systèmes embarquant du java sont pour la plupart demandeur de démultiplication de processus d'éxécution (web), à contrario de calcul CPU pur (Sytème mebarqué).
 
 ```
 ┌─────────────────────────────────────────────────────────┐
@@ -159,42 +179,42 @@ thread.start();
                         ▼
 ┌─────────────────────────────────────────────────────────┐
 │ 2. thread.start()                                       │
-│    a) Vérification état (IllegalThreadStateException)   │
+│    a) Vérification état                                 │
 │    b) Appel native: start0()                            │
 └─────────────────────────────────────────────────────────┘
                         │
                         ▼
 ┌─────────────────────────────────────────────────────────┐
-│ 3. JNI Call → JVM Native Code                          │
-│    • JVM_StartThread() (hotspot/src/share/vm/prims)    │
+│ 3. JNI Call → JVM Native Code                           │
+│    • JVM_StartThread() (hotspot/src/share/vm/prims)     │
 │    • Création JavaThread interne                        │
 │    • Allocation OSThread                                │
 └─────────────────────────────────────────────────────────┘
                         │
                         ▼
 ┌─────────────────────────────────────────────────────────┐
-│ 4. OS Thread Creation (syscall)                        │
-│    Linux: pthread_create(&tid, &attr, start_func, arg) │
-│    Windows: CreateThread(...)                          │
-│    • Allocation stack: ~2 MB                           │
-│    • Création TCB dans kernel                          │
-│    • Coût: ~0.2-1 ms                                   │
+│ 4. OS Thread Creation (syscall)                         │
+│    Linux: pthread_create(&tid, &attr, start_func, arg)  │
+│    Windows: CreateThread(...)                           │
+│    • Allocation stack: ~2 MB                            │
+│    • Création TCB dans kernel                           │
+│    • Coût: ~0.2-1 ms                                    │
 └─────────────────────────────────────────────────────────┘
                         │
                         ▼
 ┌─────────────────────────────────────────────────────────┐
-│ 5. OS Scheduler                                        │
-│    • Thread ajouté à la run queue                      │
-│    • Attente d'un CPU disponible                       │
-│    • Peut prendre du temps si système chargé           │
+│ 5. OS Scheduler                                         │
+│    • Thread ajouté à la run queue                       │
+│    • Attente d'un CPU disponible                        │
+│    • Peut prendre du temps si système chargé            │
 └─────────────────────────────────────────────────────────┘
                         │
                         ▼
 ┌─────────────────────────────────────────────────────────┐
-│ 6. Exécution run()                                     │
-│    • Thread obtient un CPU core                        │
-│    • Exécution du code Runnable                        │
-│    • Création frames sur le thread stack               │
+│ 6. Exécution run()                                      │
+│    • Thread obtient un CPU core                         │
+│    • Exécution du code Runnable                         │
+│    • Création frames sur le thread stack                │
 └─────────────────────────────────────────────────────────┘
 ```
 
@@ -264,10 +284,7 @@ Thread
 │ Bloqué par       │ JVM             │ OS kernel        │
 ├──────────────────┼─────────────────┼──────────────────┤
 │ Libéré quand     │ Lock disponible │ I/O terminée     │
-├──────────────────┼─────────────────┼──────────────────┤
-│ Problème avec    │ Pinning si      │ Démontage auto   │
-│ Virtual Threads  │ synchronized    │ ✅ OK            │
-└──────────────────┴─────────────────┴──────────────────┘
+└──────────────────┼─────────────────┼──────────────────┘
 
 ### Visualisation avec code instrumenté
 

@@ -11,34 +11,37 @@
 
 ```
 ┌────────────────────────────────────────────────────┐
-│ Timeline de la concurrence Java                   │
+│ Timeline de la concurrence Java                    │
 ├────────────────────────────────────────────────────┤
 │                                                    │
-│ 1995 - Java 1.0                                   │
-│ ├─ Threads natifs (1:1 avec OS)                   │
-│ └─ synchronized, wait/notify                      │
+│ 1995 - Java 1.0                                    │
+│ ├─ Green Threads (N:M avec OS)                     │
+│ └─ synchronized, wait/notify                       |
+|                                                    |
+│ 1998 - Java 1.2                                    │
+| └─ Threads natifs (1:1 avec OS)                    │
 │                                                    │
-│ 2004 - Java 5                                     │
-│ ├─ java.util.concurrent                           │
-│ ├─ ExecutorService, ThreadPools                   │
-│ ├─ ReentrantLock, Semaphore                       │
+│ 2004 - Java 5                                      │
+│ ├─ java.util.concurrent                            │
+│ ├─ ExecutorService, ThreadPools                    │
+│ ├─ ReentrantLock, Semaphore                        │
 │ └─ Concurrent collections                          │
 │                                                    │
-│ 2011 - Java 7                                     │
-│ └─ ForkJoinPool                                   │
+│ 2011 - Java 7                                      │
+│ └─ ForkJoinPool                                    │
 │                                                    │
-│ 2014 - Java 8                                     │
-│ ├─ CompletableFuture                              │
-│ ├─ Streams parallèles                             │
-│ └─ Lambda expressions                             │
+│ 2014 - Java 8                                      │
+│ ├─ CompletableFuture                               │
+│ ├─ Streams parallèles                              │
+│ └─ Lambda expressions                              │
 │                                                    │
-│ 2017 - Reactive Streams                           │
-│ ├─ Project Reactor                                │
-│ ├─ RxJava                                         │
-│ └─ Spring WebFlux                                 │
+│ 2017 - Reactive Streams                            │
+│ ├─ Project Reactor                                 │
+│ ├─ RxJava                                          │
+│ └─ Spring WebFlux                                  │
 │                                                    │
-│ 2023 - Java 21 (LTS)                              │
-│ └─ Virtual Threads (Project Loom) ⭐              │
+│ 2023 - Java 21 (LTS)                               │
+│ └─ Virtual Threads (Project Loom)                  │
 │                                                    │
 └────────────────────────────────────────────────────┘
 ```
