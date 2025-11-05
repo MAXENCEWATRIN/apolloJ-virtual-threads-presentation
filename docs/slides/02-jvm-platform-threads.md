@@ -8,8 +8,6 @@
 
 ### Le mapping 1:1
 
-### Le mapping 1:1
-
 **Depuis Java 1.2 (1998)**, Java utilise un modèle **1:1** appelé "native threads" : 
 chaque thread Java (`java.lang.Thread`) correspond à **exactement un thread du 
 système d'exploitation** (pthread sur Linux/Unix, thread Windows).

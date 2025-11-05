@@ -29,6 +29,8 @@ Cette présentation explore les **Virtual Threads** introduits dans Java 21, une
 
 [📋 Voir le sommaire →](sommaire.md)
 
+[📚 Consulter les sources →](sources.md)
+
 [▶️ Commencer la présentation →](slides/01-qu-est-ce-qu-un-thread.md)
 
 ---
