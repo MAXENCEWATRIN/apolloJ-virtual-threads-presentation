@@ -20,8 +20,8 @@
 
 2. Performance du code asynchrone
    • Throughput équivalent à reactive
-   • Millions de threads possibles
-   • Blocking I/O gratuit
+   • Millions de threads possibles qui demanderont un carrier thread CPU uniquement lors des I/O
+   • Blocking I/O gratuit car démontage automatique
    • CPU bien utilisé
 
 3. Compatibilité totale

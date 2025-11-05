@@ -1133,7 +1133,7 @@ Avec Platform Threads, choisissez 2 sur 3:        │
 │ Context switch overhead  │ 10-70% (>1000)   │
 │ Temps création           │ 0.5 ms           │
 │ Efficacité I/O bloquant  │ 5-30% CPU usage  │
-│ Coût horizontal scaling  │ $$             │
+│ Coût horizontal scaling  │ $$               │
 └──────────────────────────┴──────────────────┘
 
 Ce que ça signifie en production:
